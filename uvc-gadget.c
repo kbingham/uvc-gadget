@@ -33,10 +33,12 @@
 #include <errno.h>
 
 #include <linux/usb/ch9.h>
+#include <linux/usb/g_uvc.h>
 #include <linux/usb/video.h>
 #include <linux/videodev2.h>
 
-#include "../drivers/usb/gadget/uvc.h"
+#define UVC_INTF_CONTROL	0
+#define UVC_INTF_STREAMING	1
 
 #define clamp(val, min, max) ({                 \
         typeof(val) __val = (val);              \
