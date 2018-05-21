@@ -38,7 +38,7 @@ enum event_type {
 
 void events_watch_fd(struct events *events, int fd, enum event_type type,
 		     void(*callback)(void *), void *priv);
-void events_unwatch_fd(struct events *events, int fd);
+void events_unwatch_fd(struct events *events, int fd, enum event_type type);
 
 bool events_loop(struct events *events);
 void events_stop(struct events *events);

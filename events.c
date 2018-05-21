@@ -66,14 +66,14 @@ void events_watch_fd(struct events *events, int fd, enum event_type type,
 	list_append(&event->list, &events->events);
 }
 
-void events_unwatch_fd(struct events *events, int fd)
+void events_unwatch_fd(struct events *events, int fd, enum event_type type)
 {
 	struct event_fd *event = NULL;
 	struct event_fd *entry;
 	int maxfd = 0;
 
 	list_for_each_entry(entry, &events->events, list) {
-		if (entry->fd == fd)
+		if (entry->fd == fd && entry->type == type)
 			event = entry;
 		else
 			maxfd = max(maxfd, entry->fd);
