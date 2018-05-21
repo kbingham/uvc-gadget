@@ -9,7 +9,7 @@ LDFLAGS		:= -g
 
 all: uvc-gadget
 
-uvc-gadget: uvc-gadget.o
+uvc-gadget: events.o uvc-gadget.o
 	$(CC) $(LDFLAGS) -o $@ $^
 
 clean:
