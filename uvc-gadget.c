@@ -251,6 +251,7 @@ uvc_video_stream(struct uvc_device *dev, int enable)
 
 	if (!enable) {
 		printf("Stopping video stream.\n");
+		events_unwatch_fd(&dev->events, dev->fd, EVENT_WRITE);
 		ioctl(dev->fd, VIDIOC_STREAMOFF, &type);
 		return 0;
 	}
@@ -275,6 +276,8 @@ uvc_video_stream(struct uvc_device *dev, int enable)
 	}
 
 	ioctl(dev->fd, VIDIOC_STREAMON, &type);
+	events_watch_fd(&dev->events, dev->fd, EVENT_WRITE,
+			uvc_video_process, dev);
 	return ret;
 }
 
@@ -749,8 +752,6 @@ int main(int argc, char *argv[])
 	uvc_device = dev;
 	signal(SIGINT, sigint_handler);
 
-	events_watch_fd(&dev->events, dev->fd, EVENT_WRITE,
-			uvc_video_process, dev);
 	events_watch_fd(&dev->events, dev->fd, EVENT_EXCEPTION,
 			uvc_events_process, dev);
 
