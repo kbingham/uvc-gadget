@@ -181,3 +181,14 @@ void events_init(struct events *events)
 	events->maxfd = 0;
 	list_init(&events->events);
 }
+
+void events_cleanup(struct events *events)
+{
+	while (!list_empty(&events->events)) {
+		struct event_fd *event;
+
+		event = list_first_entry(&events->events, typeof(*event), list);
+		list_remove(&event->list);
+		free(event);
+	}
+}

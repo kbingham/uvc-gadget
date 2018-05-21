@@ -44,5 +44,6 @@ bool events_loop(struct events *events);
 void events_stop(struct events *events);
 
 void events_init(struct events *events);
+void events_cleanup(struct events *events);
 
 #endif
