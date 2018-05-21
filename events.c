@@ -128,19 +128,16 @@ bool events_loop(struct events *events)
 	events->done = false;
 
 	while (!events->done) {
-		struct timeval timeout;
 		fd_set rfds;
 		fd_set wfds;
 		fd_set efds;
 		int ret;
 
-		timeout.tv_sec = SELECT_TIMEOUT / 1000;
-		timeout.tv_usec = (SELECT_TIMEOUT % 1000) * 1000;
 		rfds = events->rfds;
 		wfds = events->wfds;
 		efds = events->efds;
 
-		ret = select(events->maxfd + 1, &rfds, &wfds, &efds, &timeout);
+		ret = select(events->maxfd + 1, &rfds, &wfds, &efds, NULL);
 		if (ret < 0) {
 			/* EINTR means that a signal has been received, continue
 			 * to the next iteration in that case.
@@ -149,14 +146,6 @@ bool events_loop(struct events *events)
 				continue;
 
 			printf("error: select failed with %d\n", errno);
-			break;
-		}
-		if (ret == 0) {
-			/* select() should never time out as the ISP is supposed
-			 * to capture images continuously. A timeout is thus
-			 * considered as a fatal error.
-			 */
-			printf("error: select timeout\n");
 			break;
 		}
 
