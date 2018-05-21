@@ -12,7 +12,7 @@
  * Contact: Laurent Pinchart <laurent.pinchart@ideasonboard.com>
  */
 
-#define _BSD_SOURCE
+#define _DEFAULT_SOURCE
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
