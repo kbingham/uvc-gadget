@@ -26,6 +26,7 @@
 
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -36,6 +37,8 @@
 #include <linux/usb/g_uvc.h>
 #include <linux/usb/video.h>
 #include <linux/videodev2.h>
+
+#include "events.h"
 
 #define UVC_INTF_CONTROL	0
 #define UVC_INTF_STREAMING	1
@@ -72,6 +75,8 @@ struct uvc_device
 	uint8_t color;
 	unsigned int imgsize;
 	void *imgdata;
+
+	struct events events;
 };
 
 static struct uvc_device *
@@ -108,6 +113,8 @@ uvc_open(const char *devname)
 
 	memset(dev, 0, sizeof *dev);
 	dev->fd = fd;
+
+	events_init(&dev->events);
 
 	return dev;
 }
@@ -148,9 +155,10 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
 	}
 }
 
-static int
-uvc_video_process(struct uvc_device *dev)
+static void
+uvc_video_process(void *d)
 {
+	struct uvc_device *dev = d;
 	struct v4l2_buffer buf;
 	int ret;
 
@@ -161,7 +169,7 @@ uvc_video_process(struct uvc_device *dev)
 	if ((ret = ioctl(dev->fd, VIDIOC_DQBUF, &buf)) < 0) {
 		printf("Unable to dequeue buffer: %s (%d).\n", strerror(errno),
 			errno);
-		return ret;
+		return;
 	}
 
 	uvc_video_fill_buffer(dev, &buf);
@@ -169,10 +177,8 @@ uvc_video_process(struct uvc_device *dev)
 	if ((ret = ioctl(dev->fd, VIDIOC_QBUF, &buf)) < 0) {
 		printf("Unable to requeue buffer: %s (%d).\n", strerror(errno),
 			errno);
-		return ret;
+		return;
 	}
-
-	return 0;
 }
 
 static int
@@ -566,8 +572,9 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
 }
 
 static void
-uvc_events_process(struct uvc_device *dev)
+uvc_events_process(void *d)
 {
+	struct uvc_device *dev = d;
 	struct v4l2_event v4l2_event;
 	struct uvc_event *uvc_event = (void *)&v4l2_event.u.data;
 	struct uvc_request_data resp;
@@ -681,14 +688,22 @@ static void usage(const char *argv0)
 	fprintf(stderr, " -i image	MJPEG image\n");
 }
 
+/* Necesssary for and only used by signal handler. */
+static struct uvc_device *uvc_device;
+
+static void sigint_handler(int signal __attribute__((__unused__)))
+{
+	/* Stop the main loop when the user presses CTRL-C */
+	events_stop(&uvc_device->events);
+}
+
 int main(int argc, char *argv[])
 {
 	char *device = "/dev/video0";
 	struct uvc_device *dev;
 	int bulk_mode = 0;
 	char *mjpeg_image = NULL;
-	fd_set fds;
-	int ret, opt;
+	int opt;
 
 	while ((opt = getopt(argc, argv, "bd:hi:")) != -1) {
 		switch (opt) {
@@ -726,20 +741,23 @@ int main(int argc, char *argv[])
 	uvc_events_init(dev);
 	uvc_video_init(dev);
 
-	FD_ZERO(&fds);
-	FD_SET(dev->fd, &fds);
+	/*
+	 * Register a signal handler for SIGINT, received when the user presses
+	 * CTRL-C. This will allow the main loop to be interrupted, and resources
+	 * to be freed cleanly.
+	 */
+	uvc_device = dev;
+	signal(SIGINT, sigint_handler);
 
-	while (1) {
-		fd_set efds = fds;
-		fd_set wfds = fds;
+	events_watch_fd(&dev->events, dev->fd, EVENT_WRITE,
+			uvc_video_process, dev);
+	events_watch_fd(&dev->events, dev->fd, EVENT_EXCEPTION,
+			uvc_events_process, dev);
 
-		ret = select(dev->fd + 1, NULL, &wfds, &efds, NULL);
-		if (FD_ISSET(dev->fd, &efds))
-			uvc_events_process(dev);
-		if (FD_ISSET(dev->fd, &wfds))
-			uvc_video_process(dev);
-	}
+	/* Main capture loop */
+	events_loop(&dev->events);
 
+	events_cleanup(&dev->events);
 	uvc_close(dev);
 	return 0;
 }
