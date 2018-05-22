@@ -592,7 +592,7 @@ static void usage(const char *argv0)
 	fprintf(stderr, " -i image	MJPEG image\n");
 }
 
-/* Necesssary for and only used by signal handler. */
+/* Necessary for and only used by signal handler. */
 static struct uvc_device *uvc_device;
 
 static void sigint_handler(int signal __attribute__((__unused__)))
