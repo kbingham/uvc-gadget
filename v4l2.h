@@ -147,9 +147,10 @@ int v4l2_set_crop(struct v4l2_device *dev, struct v4l2_rect *rect);
  * will be stored in the @dev::nbufs field.
  *
  * When @memtype is set to V4L2_MEMORY_MMAP the buffers are allocated by the
- * driver and mapped to userspace. When @memtype is set to V4L2_MEMORY_USERPTR
- * the driver only allocates buffer objects and relies on the application to
- * provide memory storage for video frames.
+ * driver. They can then be mapped to userspace by calling v4l2_mmap_buffers().
+ * When @memtype is set to V4L2_MEMORY_USERPTR the driver only allocates buffer
+ * objects and relies on the application to provide memory storage for video
+ * frames.
  *
  * Return 0 on success or a negative error code on failure.
  */
@@ -170,6 +171,24 @@ int v4l2_alloc_buffers(struct v4l2_device *dev, enum v4l2_memory memtype,
  * Return 0 on success or a negative error code on failure.
  */
 int v4l2_free_buffers(struct v4l2_device *dev);
+
+/*
+ * v4l2_mmap_buffers - Map buffers to application memory space
+ * @dev: Device instance
+ *
+ * Map all the buffers previously allocated by v4l2_alloc_buffers() to the
+ * application memory space. The buffer memory can be accessed through the mem
+ * field of each entry in the @dev::buffers array.
+ *
+ * Buffers will be automatically unmapped when freed with v4l2_free_buffers().
+ *
+ * This function can only be called when buffers have been allocated with the
+ * memory type set to V4L2_MEMORY_MMAP. If the memory type is different, or if
+ * no buffers have been allocated, it will return -EINVAL.
+ *
+ * Return 0 on success or a negative error code on failure.
+ */
+int v4l2_mmap_buffers(struct v4l2_device *dev);
 
 /*
  * v4l2_queue_buffer - Queue a buffer for video capture/output

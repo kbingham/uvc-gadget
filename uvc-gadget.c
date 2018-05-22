@@ -163,6 +163,12 @@ uvc_video_stream(struct uvc_device *dev, int enable)
 		return ret;
 	}
 
+	ret = v4l2_mmap_buffers(dev->vdev);
+	if (ret < 0) {
+		printf("Failed to mmap buffers.\n");
+		goto error;
+	}
+
 	for (i = 0; i < dev->vdev->nbufs; ++i) {
 		struct v4l2_video_buffer *buf = &dev->vdev->buffers[i];
 
@@ -170,13 +176,17 @@ uvc_video_stream(struct uvc_device *dev, int enable)
 
 		ret = v4l2_queue_buffer(dev->vdev, buf);
 		if (ret < 0)
-			return ret;
+			goto error;
 	}
 
 	v4l2_stream_on(dev->vdev);
 	events_watch_fd(&dev->events, dev->vdev->fd, EVENT_WRITE,
 			uvc_video_process, dev);
 
+	return 0;
+
+error:
+	v4l2_free_buffers(dev->vdev);
 	return ret;
 }
 

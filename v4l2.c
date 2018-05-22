@@ -506,12 +506,14 @@ int v4l2_alloc_buffers(struct v4l2_device *dev, enum v4l2_memory memtype,
 		       unsigned int nbufs)
 {
 	struct v4l2_requestbuffers rb;
-	struct v4l2_buffer buf;
 	unsigned int i;
 	int ret;
 
 	if (dev->nbufs != 0)
 		return -EBUSY;
+
+	if (memtype != V4L2_MEMORY_MMAP && memtype != V4L2_MEMORY_USERPTR)
+		return -EINVAL;
 
 	/* Request the buffers from the driver. */
 	memset(&rb, 0, sizeof rb);
@@ -550,52 +552,6 @@ int v4l2_alloc_buffers(struct v4l2_device *dev, enum v4l2_memory memtype,
 
 	for (i = 0; i < dev->nbufs; ++i)
 		dev->buffers[i].index = i;
-
-	/* Map the buffers. */
-	for (i = 0; i < rb.count; ++i) {
-		memset(&buf, 0, sizeof buf);
-		buf.index = i;
-		buf.type = dev->type;
-		buf.memory = memtype;
-		ret = ioctl(dev->fd, VIDIOC_QUERYBUF, &buf);
-		if (ret < 0) {
-			printf("%s: unable to query buffer %u (%d).\n",
-			       dev->name, i, errno);
-			ret = -errno;
-			goto done;
-		}
-
-		switch (memtype) {
-		case V4L2_MEMORY_MMAP:
-			dev->buffers[i].mem = mmap(0, buf.length, PROT_READ | PROT_WRITE,
-					      MAP_SHARED, dev->fd, buf.m.offset);
-			if (dev->buffers[i].mem == MAP_FAILED) {
-				printf("%s: unable to map buffer %u (%d)\n",
-				       dev->name, i, errno);
-				ret = -errno;
-				goto done;
-			}
-			dev->buffers[i].size = buf.length;
-			printf("%s: buffer %u mapped at address %p.\n",
-			       dev->name, i, dev->buffers[i].mem);
-			break;
-
-		case V4L2_MEMORY_USERPTR:
-			if (dev->buffers[i].size < buf.length) {
-				printf("%s: buffer %u too small (%u bytes required, "
-				       "%u bytes available.\n", dev->name, i,
-				       buf.length, dev->buffers[i].size);
-				ret = -EINVAL;
-				goto done;
-			}
-
-			printf("%s: buffer %u valid.\n", dev->name, i);
-			break;
-
-		default:
-			break;
-		}
-	}
 
 	ret = 0;
 
@@ -649,6 +605,48 @@ int v4l2_free_buffers(struct v4l2_device *dev)
 	free(dev->buffers);
 	dev->buffers = NULL;
 	dev->nbufs = 0;
+
+	return 0;
+}
+
+int v4l2_mmap_buffers(struct v4l2_device *dev)
+{
+	unsigned int i;
+	int ret;
+
+	if (dev->memtype != V4L2_MEMORY_MMAP)
+		return -EINVAL;
+
+	for (i = 0; i < dev->nbufs; ++i) {
+		struct v4l2_video_buffer *buffer = &dev->buffers[i];
+		struct v4l2_buffer buf = {
+			.index = i,
+			.type = dev->type,
+			.memory = dev->memtype,
+		};
+		void *mem;
+
+		ret = ioctl(dev->fd, VIDIOC_QUERYBUF, &buf);
+		if (ret < 0) {
+			printf("%s: unable to query buffer %u (%d).\n",
+			       dev->name, i, errno);
+			return -errno;
+		}
+
+		mem = mmap(0, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED,
+			   dev->fd, buf.m.offset);
+		if (mem == MAP_FAILED) {
+			printf("%s: unable to map buffer %u (%d)\n",
+			       dev->name, i, errno);
+			return -errno;
+		}
+
+		buffer->mem = mem;
+		buffer->size = buf.length;
+
+		printf("%s: buffer %u mapped at address %p.\n", dev->name, i,
+		       mem);
+	}
 
 	return 0;
 }
