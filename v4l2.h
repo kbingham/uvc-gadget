@@ -31,7 +31,7 @@
  * @error: True if an error occured while capturing video data for the buffer
  * @allocated: True if memory for the buffer has been allocated
  * @mem: Video data memory
- * @fd: Video data dmabuf handle
+ * @dmabuf: Video data dmabuf handle
  */
 struct v4l2_video_buffer
 {
@@ -42,7 +42,7 @@ struct v4l2_video_buffer
 	bool error;
 	bool allocated;
 	void *mem;
-	int fd;
+	int dmabuf;
 };
 
 struct v4l2_device
@@ -148,7 +148,7 @@ int v4l2_set_crop(struct v4l2_device *dev, struct v4l2_rect *rect);
  *
  * When @memtype is set to V4L2_MEMORY_MMAP the buffers are allocated by the
  * driver. They can then be mapped to userspace by calling v4l2_mmap_buffers().
- * When @memtype is set to V4L2_MEMORY_USERPTR the driver only allocates buffer
+ * When @memtype is set to V4L2_MEMORY_DMABUF the driver only allocates buffer
  * objects and relies on the application to provide memory storage for video
  * frames.
  *
@@ -162,7 +162,7 @@ int v4l2_alloc_buffers(struct v4l2_device *dev, enum v4l2_memory memtype,
  * @dev: Device instance
  *
  * Free buffers previously allocated by v4l2_alloc_buffers(). If the buffers
- * have been allocated with the V4L2_MEMORY_USERPTR memory type only the buffer
+ * have been allocated with the V4L2_MEMORY_DMABUF memory type only the buffer
  * objects are freed, and the caller is responsible for freeing the video frames
  * memory if required.
  *
@@ -171,6 +171,50 @@ int v4l2_alloc_buffers(struct v4l2_device *dev, enum v4l2_memory memtype,
  * Return 0 on success or a negative error code on failure.
  */
 int v4l2_free_buffers(struct v4l2_device *dev);
+
+/*
+ * v4l2_export_buffers - Export buffers as dmabuf objects
+ * @dev: Device instance
+ *
+ * Export all the buffers previously allocated by v4l2_alloc_buffers() as dmabuf
+ * objects. The dmabuf objects handles can be accessed through the dmabuf field
+ * of each entry in the @dev::buffers array.
+ *
+ * The dmabuf objects handles will be automatically closed when the buffers are
+ * freed with v4l2_free_buffers().
+ *
+ * This function can only be called when buffers have been allocated with the
+ * memory type set to V4L2_MEMORY_MMAP. If the memory type is different, or if
+ * no buffers have been allocated, it will return -EINVAL.
+ *
+ * Return 0 on success or a negative error code on failure.
+ */
+int v4l2_export_buffers(struct v4l2_device *dev);
+
+/*
+ * v4l2_import_buffers - Import buffer backing store as dmabuf objects
+ * @dev: Device instance
+ * @nbufs: Number of buffers in the @buffers array
+ * @buffers: Buffers to be imported
+ *
+ * Import the dmabuf objects from @buffers as backing store for the device
+ * buffers previously allocated by v4l2_alloc_buffers().
+ *
+ * The dmabuf file handles are duplicated and stored in the dmabuf field of the
+ * @dev::buffers array. The handles from the @buffers array can thus be closed
+ * independently without impacting usage of the imported dmabuf objects. The
+ * duplicated file handles will be automatically closed when the buffers are
+ * freed with v4l2_free_buffers().
+ *
+ * This function can only be called when buffers have been allocated with the
+ * memory type set to V4L2_MEMORY_DMABUF. If the memory type is different, if no
+ * buffers have been allocated, or if the number of allocated buffers is larger
+ * than @nbufs, it will return -EINVAL.
+ *
+ * Return 0 on success or a negative error code on failure.
+ */
+int v4l2_import_buffers(struct v4l2_device *dev, unsigned int nbufs,
+			const struct v4l2_video_buffer *buffers);
 
 /*
  * v4l2_mmap_buffers - Map buffers to application memory space
@@ -202,7 +246,7 @@ int v4l2_mmap_buffers(struct v4l2_device *dev);
  * buffer to be queued. The index is zero-based and must be lower than the
  * number of allocated buffers.
  *
- * For V4L2_MEMORY_USERPTR buffers, the caller must initialize the @buffer::mem
+ * For V4L2_MEMORY_DMABUF buffers, the caller must initialize the @buffer::dmabuf
  * field with the address of the video frame memory, and the @buffer:length
  * field with its size in bytes. For optimal performances the address and length
  * should be identical between v4l2_queue_buffer() calls for a given buffer

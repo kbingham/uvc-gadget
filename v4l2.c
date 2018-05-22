@@ -512,7 +512,7 @@ int v4l2_alloc_buffers(struct v4l2_device *dev, enum v4l2_memory memtype,
 	if (dev->nbufs != 0)
 		return -EBUSY;
 
-	if (memtype != V4L2_MEMORY_MMAP && memtype != V4L2_MEMORY_USERPTR)
+	if (memtype != V4L2_MEMORY_MMAP && memtype != V4L2_MEMORY_DMABUF)
 		return -EINVAL;
 
 	/* Request the buffers from the driver. */
@@ -550,8 +550,10 @@ int v4l2_alloc_buffers(struct v4l2_device *dev, enum v4l2_memory memtype,
 
 	memset(dev->buffers, 0, sizeof *dev->buffers * nbufs);
 
-	for (i = 0; i < dev->nbufs; ++i)
+	for (i = 0; i < dev->nbufs; ++i) {
 		dev->buffers[i].index = i;
+		dev->buffers[i].dmabuf = -1;
+	}
 
 	ret = 0;
 
@@ -571,13 +573,10 @@ int v4l2_free_buffers(struct v4l2_device *dev)
 	if (dev->nbufs == 0)
 		return 0;
 
-	if (dev->memtype == V4L2_MEMORY_MMAP) {
-		for (i = 0; i < dev->nbufs; ++i) {
-			struct v4l2_video_buffer *buffer = &dev->buffers[i];
+	for (i = 0; i < dev->nbufs; ++i) {
+		struct v4l2_video_buffer *buffer = &dev->buffers[i];
 
-			if (buffer->mem == NULL)
-				continue;
-
+		if (buffer->mem) {
 			ret = munmap(buffer->mem, buffer->size);
 			if (ret < 0) {
 				printf("%s: unable to unmap buffer %u (%d)\n",
@@ -586,8 +585,14 @@ int v4l2_free_buffers(struct v4l2_device *dev)
 			}
 
 			buffer->mem = NULL;
-			buffer->size = 0;
 		}
+
+		if (buffer->dmabuf != -1) {
+			close(buffer->dmabuf);
+			buffer->dmabuf = -1;
+		}
+
+		buffer->size = 0;
 	}
 
 	memset(&rb, 0, sizeof rb);
@@ -605,6 +610,88 @@ int v4l2_free_buffers(struct v4l2_device *dev)
 	free(dev->buffers);
 	dev->buffers = NULL;
 	dev->nbufs = 0;
+
+	return 0;
+}
+
+int v4l2_export_buffers(struct v4l2_device *dev)
+{
+	unsigned int i;
+	int ret;
+
+	if (dev->nbufs == 0)
+		return -EINVAL;
+
+	if (dev->memtype != V4L2_MEMORY_MMAP)
+		return -EINVAL;
+
+	for (i = 0; i < dev->nbufs; ++i) {
+		struct v4l2_exportbuffer expbuf = {
+			.type = dev->type,
+			.index = i,
+		};
+
+		ret = ioctl(dev->fd, VIDIOC_EXPBUF, &expbuf);
+		if (ret < 0) {
+			printf("Failed to export buffer %u.\n", i);
+			return ret;
+		}
+
+		dev->buffers[i].dmabuf = expbuf.fd;
+
+		printf("%s: buffer %u exported with fd %u.\n",
+		       dev->name, i, dev->buffers[i].dmabuf);
+	}
+
+	return 0;
+}
+
+int v4l2_import_buffers(struct v4l2_device *dev, unsigned int nbufs,
+			const struct v4l2_video_buffer *buffers)
+{
+	unsigned int i;
+	int ret;
+
+	if (dev->nbufs == 0 || dev->nbufs > nbufs)
+		return -EINVAL;
+
+	if (dev->memtype != V4L2_MEMORY_DMABUF)
+		return -EINVAL;
+
+	for (i = 0; i < dev->nbufs; ++i) {
+		const struct v4l2_video_buffer *buffer = &buffers[i];
+		struct v4l2_buffer buf = {
+			.index = i,
+			.type = dev->type,
+			.memory = dev->memtype,
+		};
+		int fd;
+
+		ret = ioctl(dev->fd, VIDIOC_QUERYBUF, &buf);
+		if (ret < 0) {
+			printf("%s: unable to query buffer %u (%d).\n",
+			       dev->name, i, errno);
+			return -errno;
+		}
+
+		if (buffer->size < buf.length) {
+			printf("%s: buffer %u too small (%u bytes required, %u bytes available.\n",
+			       dev->name, i, buf.length, buffer->size);
+			return -EINVAL;
+		}
+
+		fd = dup(buffer->dmabuf);
+		if (fd < 0) {
+			printf("%s: failed to duplicate dmabuf fd %d.\n",
+			       dev->name, buffer->dmabuf);
+			return ret;
+		}
+
+		printf("%s: buffer %u valid.\n", dev->name, i);
+
+		dev->buffers[i].dmabuf = fd;
+		dev->buffers[i].size = buffer->size;
+	}
 
 	return 0;
 }
@@ -688,10 +775,8 @@ int v4l2_queue_buffer(struct v4l2_device *dev, struct v4l2_video_buffer *buffer)
 	buf.type = dev->type;
 	buf.memory = dev->memtype;
 
-	if (dev->memtype == V4L2_MEMORY_USERPTR)
-		buf.m.userptr = (unsigned long)dev->buffers[buffer->index].mem;
-
-	buf.length = dev->buffers[buffer->index].size;
+	if (dev->memtype == V4L2_MEMORY_DMABUF)
+		buf.m.fd = (unsigned long)dev->buffers[buffer->index].dmabuf;
 
 	if (dev->type == V4L2_BUF_TYPE_VIDEO_OUTPUT)
 		buf.bytesused = buffer->bytesused;
