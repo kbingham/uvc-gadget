@@ -329,6 +329,7 @@ void v4l2_close(struct v4l2_device *dev)
 
 	free(dev->name);
 	close(dev->fd);
+	free(dev);
 }
 
 /* -----------------------------------------------------------------------------
