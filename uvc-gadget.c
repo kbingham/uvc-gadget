@@ -39,6 +39,7 @@
 #include <linux/videodev2.h>
 
 #include "events.h"
+#include "v4l2.h"
 #include "tools.h"
 
 #define UVC_INTF_CONTROL	0
@@ -46,7 +47,7 @@
 
 struct uvc_device
 {
-	int fd;
+	struct v4l2_device *vdev;
 
 	struct uvc_streaming_control probe;
 	struct uvc_streaming_control commit;
@@ -56,10 +57,6 @@ struct uvc_device
 	unsigned int fcc;
 	unsigned int width;
 	unsigned int height;
-
-	void **mem;
-	unsigned int nbufs;
-	unsigned int bufsize;
 
 	unsigned int bulk;
 	uint8_t color;
@@ -73,36 +70,18 @@ static struct uvc_device *
 uvc_open(const char *devname)
 {
 	struct uvc_device *dev;
-	struct v4l2_capability cap;
-	int ret;
-	int fd;
-
-	fd = open(devname, O_RDWR | O_NONBLOCK);
-	if (fd == -1) {
-		printf("v4l2 open failed: %s (%d)\n", strerror(errno), errno);
-		return NULL;
-	}
-
-	printf("open succeeded, file descriptor = %d\n", fd);
-
-	ret = ioctl(fd, VIDIOC_QUERYCAP, &cap);
-	if (ret < 0) {
-		printf("unable to query device: %s (%d)\n", strerror(errno),
-			errno);
-		close(fd);
-		return NULL;
-        }
-
-	printf("device is %s on bus %s\n", cap.card, cap.bus_info);
 
 	dev = malloc(sizeof *dev);
-	if (dev == NULL) {
-		close(fd);
+	if (dev == NULL)
 		return NULL;
-	}
 
 	memset(dev, 0, sizeof *dev);
-	dev->fd = fd;
+
+	dev->vdev = v4l2_open(devname);
+	if (dev->vdev == NULL) {
+		free(dev);
+		return NULL;
+	}
 
 	events_init(&dev->events);
 
@@ -112,9 +91,10 @@ uvc_open(const char *devname)
 static void
 uvc_close(struct uvc_device *dev)
 {
-	close(dev->fd);
+	v4l2_close(dev->vdev);
+	dev->vdev = NULL;
+
 	free(dev->imgdata);
-	free(dev->mem);
 	free(dev);
 }
 
@@ -123,7 +103,7 @@ uvc_close(struct uvc_device *dev)
  */
 
 static void
-uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
+uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_video_buffer *buf)
 {
 	unsigned int bpl;
 	unsigned int i;
@@ -133,13 +113,13 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
 		/* Fill the buffer with video data. */
 		bpl = dev->width * 2;
 		for (i = 0; i < dev->height; ++i)
-			memset(dev->mem[buf->index] + i*bpl, dev->color++, bpl);
+			memset(buf->mem + i*bpl, dev->color++, bpl);
 
 		buf->bytesused = bpl * dev->height;
 		break;
 
 	case V4L2_PIX_FMT_MJPEG:
-		memcpy(dev->mem[buf->index], dev->imgdata, dev->imgsize);
+		memcpy(buf->mem, dev->imgdata, dev->imgsize);
 		buf->bytesused = dev->imgsize;
 		break;
 	}
@@ -149,151 +129,74 @@ static void
 uvc_video_process(void *d)
 {
 	struct uvc_device *dev = d;
-	struct v4l2_buffer buf;
+	struct v4l2_video_buffer buf;
 	int ret;
 
-	memset(&buf, 0, sizeof buf);
-	buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-	buf.memory = V4L2_MEMORY_MMAP;
-
-	if ((ret = ioctl(dev->fd, VIDIOC_DQBUF, &buf)) < 0) {
-		printf("Unable to dequeue buffer: %s (%d).\n", strerror(errno),
-			errno);
+	ret = v4l2_dequeue_buffer(dev->vdev, &buf);
+	if (ret < 0)
 		return;
-	}
 
 	uvc_video_fill_buffer(dev, &buf);
 
-	if ((ret = ioctl(dev->fd, VIDIOC_QBUF, &buf)) < 0) {
-		printf("Unable to requeue buffer: %s (%d).\n", strerror(errno),
-			errno);
-		return;
-	}
-}
-
-static int
-uvc_video_reqbufs(struct uvc_device *dev, int nbufs)
-{
-	struct v4l2_requestbuffers rb;
-	struct v4l2_buffer buf;
-	unsigned int i;
-	int ret;
-
-	for (i = 0; i < dev->nbufs; ++i)
-		munmap(dev->mem[i], dev->bufsize);
-
-	free(dev->mem);
-	dev->mem = 0;
-	dev->nbufs = 0;
-
-	memset(&rb, 0, sizeof rb);
-	rb.count = nbufs;
-	rb.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-	rb.memory = V4L2_MEMORY_MMAP;
-
-	ret = ioctl(dev->fd, VIDIOC_REQBUFS, &rb);
-	if (ret < 0) {
-		printf("Unable to allocate buffers: %s (%d).\n",
-			strerror(errno), errno);
-		return ret;
-	}
-
-	printf("%u buffers allocated.\n", rb.count);
-
-	/* Map the buffers. */
-	dev->mem = malloc(rb.count * sizeof dev->mem[0]);
-
-	for (i = 0; i < rb.count; ++i) {
-		memset(&buf, 0, sizeof buf);
-		buf.index = i;
-		buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-		buf.memory = V4L2_MEMORY_MMAP;
-		ret = ioctl(dev->fd, VIDIOC_QUERYBUF, &buf);
-		if (ret < 0) {
-			printf("Unable to query buffer %u: %s (%d).\n", i,
-				strerror(errno), errno);
-			return -1;
-		}
-		printf("length: %u offset: %u\n", buf.length, buf.m.offset);
-
-		dev->mem[i] = mmap(0, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, dev->fd, buf.m.offset);
-		if (dev->mem[i] == MAP_FAILED) {
-			printf("Unable to map buffer %u: %s (%d)\n", i,
-				strerror(errno), errno);
-			return -1;
-		}
-		printf("Buffer %u mapped at address %p.\n", i, dev->mem[i]);
-	}
-
-	dev->bufsize = buf.length;
-	dev->nbufs = rb.count;
-
-	return 0;
+	v4l2_queue_buffer(dev->vdev, &buf);
 }
 
 static int
 uvc_video_stream(struct uvc_device *dev, int enable)
 {
-	struct v4l2_buffer buf;
 	unsigned int i;
-	int type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
 	int ret;
 
 	if (!enable) {
 		printf("Stopping video stream.\n");
-		events_unwatch_fd(&dev->events, dev->fd, EVENT_WRITE);
-		ioctl(dev->fd, VIDIOC_STREAMOFF, &type);
+		events_unwatch_fd(&dev->events, dev->vdev->fd, EVENT_WRITE);
+		v4l2_stream_off(dev->vdev);
+		v4l2_free_buffers(dev->vdev);
 		return 0;
 	}
 
 	printf("Starting video stream.\n");
 
-	for (i = 0; i < dev->nbufs; ++i) {
-		memset(&buf, 0, sizeof buf);
-
-		buf.index = i;
-		buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-		buf.memory = V4L2_MEMORY_MMAP;
-
-		uvc_video_fill_buffer(dev, &buf);
-
-		printf("Queueing buffer %u.\n", i);
-		if ((ret = ioctl(dev->fd, VIDIOC_QBUF, &buf)) < 0) {
-			printf("Unable to queue buffer: %s (%d).\n",
-				strerror(errno), errno);
-			break;
-		}
+	ret = v4l2_alloc_buffers(dev->vdev, V4L2_MEMORY_MMAP, 4);
+	if (ret < 0) {
+		printf("Failed to allocate buffers.\n");
+		return ret;
 	}
 
-	ioctl(dev->fd, VIDIOC_STREAMON, &type);
-	events_watch_fd(&dev->events, dev->fd, EVENT_WRITE,
+	for (i = 0; i < dev->vdev->nbufs; ++i) {
+		struct v4l2_video_buffer *buf = &dev->vdev->buffers[i];
+
+		uvc_video_fill_buffer(dev, buf);
+
+		ret = v4l2_queue_buffer(dev->vdev, buf);
+		if (ret < 0)
+			return ret;
+	}
+
+	v4l2_stream_on(dev->vdev);
+	events_watch_fd(&dev->events, dev->vdev->fd, EVENT_WRITE,
 			uvc_video_process, dev);
+
 	return ret;
 }
 
 static int
 uvc_video_set_format(struct uvc_device *dev)
 {
-	struct v4l2_format fmt;
-	int ret;
+	struct v4l2_pix_format fmt;
 
 	printf("Setting format to 0x%08x %ux%u\n",
 		dev->fcc, dev->width, dev->height);
 
 	memset(&fmt, 0, sizeof fmt);
-	fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-	fmt.fmt.pix.width = dev->width;
-	fmt.fmt.pix.height = dev->height;
-	fmt.fmt.pix.pixelformat = dev->fcc;
-	fmt.fmt.pix.field = V4L2_FIELD_NONE;
+	fmt.width = dev->width;
+	fmt.height = dev->height;
+	fmt.pixelformat = dev->fcc;
+	fmt.field = V4L2_FIELD_NONE;
 	if (dev->fcc == V4L2_PIX_FMT_MJPEG)
-		fmt.fmt.pix.sizeimage = dev->imgsize * 1.5;
+		fmt.sizeimage = dev->imgsize * 1.5;
 
-	if ((ret = ioctl(dev->fd, VIDIOC_S_FMT, &fmt)) < 0)
-		printf("Unable to set format: %s (%d).\n",
-			strerror(errno), errno);
-
-	return ret;
+	return v4l2_set_format(dev->vdev, &fmt);
 }
 
 static int
@@ -573,7 +476,7 @@ uvc_events_process(void *d)
 	struct uvc_request_data resp;
 	int ret;
 
-	ret = ioctl(dev->fd, VIDIOC_DQEVENT, &v4l2_event);
+	ret = ioctl(dev->vdev->fd, VIDIOC_DQEVENT, &v4l2_event);
 	if (ret < 0) {
 		printf("VIDIOC_DQEVENT failed: %s (%d)\n", strerror(errno),
 			errno);
@@ -597,17 +500,15 @@ uvc_events_process(void *d)
 		return;
 
 	case UVC_EVENT_STREAMON:
-		uvc_video_reqbufs(dev, 4);
 		uvc_video_stream(dev, 1);
 		return;
 
 	case UVC_EVENT_STREAMOFF:
 		uvc_video_stream(dev, 0);
-		uvc_video_reqbufs(dev, 0);
 		return;
 	}
 
-	ioctl(dev->fd, UVCIOC_SEND_RESPONSE, &resp);
+	ioctl(dev->vdev->fd, UVCIOC_SEND_RESPONSE, &resp);
 	if (ret < 0) {
 		printf("UVCIOC_S_EVENT failed: %s (%d)\n", strerror(errno),
 			errno);
@@ -632,13 +533,13 @@ uvc_events_init(struct uvc_device *dev)
 
 	memset(&sub, 0, sizeof sub);
 	sub.type = UVC_EVENT_SETUP;
-	ioctl(dev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
+	ioctl(dev->vdev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 	sub.type = UVC_EVENT_DATA;
-	ioctl(dev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
+	ioctl(dev->vdev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 	sub.type = UVC_EVENT_STREAMON;
-	ioctl(dev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
+	ioctl(dev->vdev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 	sub.type = UVC_EVENT_STREAMOFF;
-	ioctl(dev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
+	ioctl(dev->vdev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 }
 
 /* ---------------------------------------------------------------------------
@@ -742,7 +643,7 @@ int main(int argc, char *argv[])
 	uvc_device = dev;
 	signal(SIGINT, sigint_handler);
 
-	events_watch_fd(&dev->events, dev->fd, EVENT_EXCEPTION,
+	events_watch_fd(&dev->events, dev->vdev->fd, EVENT_EXCEPTION,
 			uvc_events_process, dev);
 
 	/* Main capture loop */
@@ -752,4 +653,3 @@ int main(int argc, char *argv[])
 	uvc_close(dev);
 	return 0;
 }
-
