@@ -17,21 +17,21 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  */
 
-#include <sys/time.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/select.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
 
-#include <unistd.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <stdlib.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <errno.h>
+#include <unistd.h>
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/g_uvc.h>
@@ -39,8 +39,8 @@
 #include <linux/videodev2.h>
 
 #include "events.h"
-#include "v4l2.h"
 #include "tools.h"
+#include "v4l2.h"
 
 #define UVC_INTF_CONTROL	0
 #define UVC_INTF_STREAMING	1
