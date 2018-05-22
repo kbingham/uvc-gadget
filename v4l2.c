@@ -510,6 +510,9 @@ int v4l2_alloc_buffers(struct v4l2_device *dev, enum v4l2_memory memtype,
 	unsigned int i;
 	int ret;
 
+	if (dev->nbufs != 0)
+		return -EBUSY;
+
 	/* Request the buffers from the driver. */
 	memset(&rb, 0, sizeof rb);
 	rb.count = nbufs;
