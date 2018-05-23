@@ -252,34 +252,40 @@ static const struct uvc_format_info uvc_formats[] = {
 static void
 uvc_fill_streaming_control(struct uvc_device *dev,
 			   struct uvc_streaming_control *ctrl,
-			   int iframe, int iformat)
+			   int iformat, int iframe, unsigned int ival)
 {
 	const struct uvc_format_info *format;
 	const struct uvc_frame_info *frame;
+	const unsigned int *interval;
 	unsigned int nframes;
 
-	if (iformat < 0)
-		iformat = ARRAY_SIZE(uvc_formats) + iformat;
-	if (iformat < 0 || iformat >= (int)ARRAY_SIZE(uvc_formats))
-		return;
-	format = &uvc_formats[iformat];
+	/*
+	 * Restrict the iformat, iframe and ival to valid values. Negative
+	 * values for iformat or iframe will result in the maximum valid value
+	 * being selected.
+	 */
+        iformat = clamp((unsigned int)iformat, 1U,
+                        (unsigned int)ARRAY_SIZE(uvc_formats));
+	format = &uvc_formats[iformat-1];
 
 	nframes = 0;
 	while (format->frames[nframes].width != 0)
 		++nframes;
 
-	if (iframe < 0)
-		iframe = nframes + iframe;
-	if (iframe < 0 || iframe >= (int)nframes)
-		return;
-	frame = &format->frames[iframe];
+	iframe = clamp((unsigned int)iframe, 1U, nframes);
+	frame = &format->frames[iframe-1];
+
+	interval = frame->intervals;
+	while (interval[0] < ival && interval[1])
+		++interval;
 
 	memset(ctrl, 0, sizeof *ctrl);
 
 	ctrl->bmHint = 1;
-	ctrl->bFormatIndex = iformat + 1;
-	ctrl->bFrameIndex = iframe + 1;
-	ctrl->dwFrameInterval = frame->intervals[0];
+	ctrl->bFormatIndex = iformat;
+	ctrl->bFrameIndex = iframe ;
+	ctrl->dwFrameInterval = *interval;
+
 	switch (format->fcc) {
 	case V4L2_PIX_FMT_YUYV:
 		ctrl->dwMaxVideoFrameSize = frame->width * frame->height * 2;
@@ -288,6 +294,7 @@ uvc_fill_streaming_control(struct uvc_device *dev,
 		ctrl->dwMaxVideoFrameSize = dev->imgsize;
 		break;
 	}
+
 	ctrl->dwMaxPayloadTransferSize = 512;	/* TODO this should be filled by the driver. */
 	ctrl->bmFramingInfo = 3;
 	ctrl->bPreferedVersion = 1;
@@ -343,8 +350,8 @@ uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs,
 	case UVC_GET_MIN:
 	case UVC_GET_MAX:
 	case UVC_GET_DEF:
-		uvc_fill_streaming_control(dev, ctrl, req == UVC_GET_MAX ? -1 : 0,
-					   req == UVC_GET_MAX ? -1 : 0);
+		uvc_fill_streaming_control(dev, ctrl, req == UVC_GET_MAX ? -1 : 1,
+					   req == UVC_GET_MAX ? -1 : 1, 0);
 		break;
 
 	case UVC_GET_RES:
@@ -414,11 +421,6 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
 {
 	struct uvc_streaming_control *target;
 	struct uvc_streaming_control *ctrl;
-	const struct uvc_format_info *format;
-	const struct uvc_frame_info *frame;
-	const unsigned int *interval;
-	unsigned int iformat, iframe;
-	unsigned int nframes;
 
 	switch (dev->control) {
 	case UVC_VS_PROBE_CONTROL:
@@ -437,36 +439,17 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
 	}
 
 	ctrl = (struct uvc_streaming_control *)&data->data;
-	iformat = clamp((unsigned int)ctrl->bFormatIndex, 1U,
-			(unsigned int)ARRAY_SIZE(uvc_formats));
-	format = &uvc_formats[iformat-1];
 
-	nframes = 0;
-	while (format->frames[nframes].width != 0)
-		++nframes;
-
-	iframe = clamp((unsigned int)ctrl->bFrameIndex, 1U, nframes);
-	frame = &format->frames[iframe-1];
-	interval = frame->intervals;
-
-	while (interval[0] < ctrl->dwFrameInterval && interval[1])
-		++interval;
-
-	target->bFormatIndex = iformat;
-	target->bFrameIndex = iframe;
-	switch (format->fcc) {
-	case V4L2_PIX_FMT_YUYV:
-		target->dwMaxVideoFrameSize = frame->width * frame->height * 2;
-		break;
-	case V4L2_PIX_FMT_MJPEG:
-		if (dev->imgsize == 0)
-			printf("WARNING: MJPEG requested and no image loaded.\n");
-		target->dwMaxVideoFrameSize = dev->imgsize;
-		break;
-	}
-	target->dwFrameInterval = *interval;
+	uvc_fill_streaming_control(dev, target, ctrl->bFormatIndex,
+				   ctrl->bFrameIndex, ctrl->dwFrameInterval);
 
 	if (dev->control == UVC_VS_COMMIT_CONTROL) {
+		const struct uvc_format_info *format;
+		const struct uvc_frame_info *frame;
+
+		format = &uvc_formats[target->bFormatIndex-1];
+		frame = &format->frames[target->bFrameIndex-1];
+
 		dev->fcc = format->fcc;
 		dev->width = frame->width;
 		dev->height = frame->height;
@@ -531,8 +514,9 @@ uvc_events_init(struct uvc_device *dev)
 {
 	struct v4l2_event_subscription sub;
 
-	uvc_fill_streaming_control(dev, &dev->probe, 0, 0);
-	uvc_fill_streaming_control(dev, &dev->commit, 0, 0);
+	/* Default to the minimum values. */
+	uvc_fill_streaming_control(dev, &dev->probe, 1, 1, 0);
+	uvc_fill_streaming_control(dev, &dev->commit, 1, 1, 0);
 
 	if (dev->bulk) {
 		/* FIXME Crude hack, must be negotiated with the driver. */
