@@ -177,6 +177,7 @@ v4l2_enum_frame_sizes(struct v4l2_device *dev, struct v4l2_format_desc *format)
 		case V4L2_FRMSIZE_TYPE_STEPWISE:
 			frame->step_width = frmenum.stepwise.step_width;
 			frame->step_height = frmenum.stepwise.step_height;
+			/* fallthrough */
 		case V4L2_FRMSIZE_TYPE_CONTINUOUS:
 			frame->min_width = frmenum.stepwise.min_width;
 			frame->min_height = frmenum.stepwise.min_height;
