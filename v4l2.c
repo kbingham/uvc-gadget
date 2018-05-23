@@ -676,7 +676,7 @@ int v4l2_import_buffers(struct v4l2_device *dev, unsigned int nbufs,
 		}
 
 		if (buffer->size < buf.length) {
-			printf("%s: buffer %u too small (%u bytes required, %u bytes available.\n",
+			printf("%s: buffer %u too small (%u bytes required, %u bytes available).\n",
 			       dev->name, i, buf.length, buffer->size);
 			return -EINVAL;
 		}
