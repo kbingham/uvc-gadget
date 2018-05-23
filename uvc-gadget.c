@@ -302,7 +302,8 @@ uvc_fill_streaming_control(struct uvc_device *dev,
 }
 
 static void
-uvc_events_process_standard(struct uvc_device *dev, struct usb_ctrlrequest *ctrl,
+uvc_events_process_standard(struct uvc_device *dev,
+			    const struct usb_ctrlrequest *ctrl,
 			    struct uvc_request_data *resp)
 {
 	printf("standard request\n");
@@ -372,7 +373,8 @@ uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs,
 }
 
 static void
-uvc_events_process_class(struct uvc_device *dev, struct usb_ctrlrequest *ctrl,
+uvc_events_process_class(struct uvc_device *dev,
+			 const struct usb_ctrlrequest *ctrl,
 			 struct uvc_request_data *resp)
 {
 	if ((ctrl->bRequestType & USB_RECIP_MASK) != USB_RECIP_INTERFACE)
@@ -393,7 +395,8 @@ uvc_events_process_class(struct uvc_device *dev, struct usb_ctrlrequest *ctrl,
 }
 
 static void
-uvc_events_process_setup(struct uvc_device *dev, struct usb_ctrlrequest *ctrl,
+uvc_events_process_setup(struct uvc_device *dev,
+			 const struct usb_ctrlrequest *ctrl,
 			 struct uvc_request_data *resp)
 {
 	dev->control = 0;
@@ -417,10 +420,12 @@ uvc_events_process_setup(struct uvc_device *dev, struct usb_ctrlrequest *ctrl,
 }
 
 static void
-uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
+uvc_events_process_data(struct uvc_device *dev,
+			const struct uvc_request_data *data)
 {
+	const struct uvc_streaming_control *ctrl =
+		(const struct uvc_streaming_control *)&data->data;
 	struct uvc_streaming_control *target;
-	struct uvc_streaming_control *ctrl;
 
 	switch (dev->control) {
 	case UVC_VS_PROBE_CONTROL:
@@ -437,8 +442,6 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
 		printf("setting unknown control, length = %d\n", data->length);
 		return;
 	}
-
-	ctrl = (struct uvc_streaming_control *)&data->data;
 
 	uvc_fill_streaming_control(dev, target, ctrl->bFormatIndex,
 				   ctrl->bFrameIndex, ctrl->dwFrameInterval);
@@ -465,7 +468,7 @@ uvc_events_process(void *d)
 {
 	struct uvc_device *dev = d;
 	struct v4l2_event v4l2_event;
-	struct uvc_event *uvc_event = (void *)&v4l2_event.u.data;
+	const struct uvc_event *uvc_event = (void *)&v4l2_event.u.data;
 	struct uvc_request_data resp;
 	int ret;
 
