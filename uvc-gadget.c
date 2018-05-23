@@ -58,7 +58,6 @@ struct uvc_device
 	unsigned int width;
 	unsigned int height;
 
-	unsigned int bulk;
 	uint8_t color;
 	unsigned int imgsize;
 	void *imgdata;
@@ -458,8 +457,6 @@ uvc_events_process_data(struct uvc_device *dev,
 		dev->height = frame->height;
 
 		uvc_video_set_format(dev);
-		if (dev->bulk)
-			uvc_video_stream(dev, 1);
 	}
 }
 
@@ -521,13 +518,6 @@ uvc_events_init(struct uvc_device *dev)
 	uvc_fill_streaming_control(dev, &dev->probe, 1, 1, 0);
 	uvc_fill_streaming_control(dev, &dev->commit, 1, 1, 0);
 
-	if (dev->bulk) {
-		/* FIXME Crude hack, must be negotiated with the driver. */
-		dev->probe.dwMaxPayloadTransferSize = 16 * 1024;
-		dev->commit.dwMaxPayloadTransferSize = 16 * 1024;
-	}
-
-
 	memset(&sub, 0, sizeof sub);
 	sub.type = UVC_EVENT_SETUP;
 	ioctl(dev->vdev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
@@ -573,7 +563,6 @@ static void usage(const char *argv0)
 {
 	fprintf(stderr, "Usage: %s [options]\n", argv0);
 	fprintf(stderr, "Available options are\n");
-	fprintf(stderr, " -b		Use bulk mode\n");
 	fprintf(stderr, " -d device	Video device\n");
 	fprintf(stderr, " -h		Print this help screen and exit\n");
 	fprintf(stderr, " -i image	MJPEG image\n");
@@ -592,16 +581,11 @@ int main(int argc, char *argv[])
 {
 	char *device = "/dev/video0";
 	struct uvc_device *dev;
-	int bulk_mode = 0;
 	char *mjpeg_image = NULL;
 	int opt;
 
-	while ((opt = getopt(argc, argv, "bd:hi:")) != -1) {
+	while ((opt = getopt(argc, argv, "d:hi:")) != -1) {
 		switch (opt) {
-		case 'b':
-			bulk_mode = 1;
-			break;
-
 		case 'd':
 			device = optarg;
 			break;
@@ -626,8 +610,6 @@ int main(int argc, char *argv[])
 		return 1;
 
 	image_load(dev, mjpeg_image);
-
-	dev->bulk = bulk_mode;
 
 	uvc_events_init(dev);
 	uvc_video_init(dev);
