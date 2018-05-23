@@ -631,13 +631,26 @@ int v4l2_export_buffers(struct v4l2_device *dev)
 			.type = dev->type,
 			.index = i,
 		};
+		struct v4l2_buffer buf = {
+			.index = i,
+			.type = dev->type,
+			.memory = dev->memtype,
+		};
+
+		ret = ioctl(dev->fd, VIDIOC_QUERYBUF, &buf);
+		if (ret < 0) {
+			printf("%s: unable to query buffer %u (%d).\n",
+			       dev->name, i, errno);
+			return -errno;
+		}
 
 		ret = ioctl(dev->fd, VIDIOC_EXPBUF, &expbuf);
 		if (ret < 0) {
 			printf("Failed to export buffer %u.\n", i);
-			return ret;
+			return -errno;
 		}
 
+		dev->buffers[i].size = buf.length;
 		dev->buffers[i].dmabuf = expbuf.fd;
 
 		printf("%s: buffer %u exported with fd %u.\n",
