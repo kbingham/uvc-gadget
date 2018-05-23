@@ -62,11 +62,8 @@ struct uvc_device
 
 struct uvc_stream
 {
+	struct v4l2_device *cap;
 	struct uvc_device *uvc;
-
-	uint8_t color;
-	unsigned int imgsize;
-	void *imgdata;
 
 	struct events *events;
 };
@@ -104,28 +101,17 @@ uvc_close(struct uvc_device *dev)
  * Video streaming
  */
 
-static void
-uvc_video_fill_buffer(struct uvc_stream *stream, struct v4l2_video_buffer *buf)
+static void capture_video_process(void *d)
 {
-	struct uvc_device *dev = stream->uvc;
-	unsigned int bpl;
-	unsigned int i;
+	struct uvc_stream *stream = d;
+	struct v4l2_video_buffer buf;
+	int ret;
 
-	switch (dev->fcc) {
-	case V4L2_PIX_FMT_YUYV:
-		/* Fill the buffer with video data. */
-		bpl = dev->width * 2;
-		for (i = 0; i < dev->height; ++i)
-			memset(buf->mem + i*bpl, stream->color++, bpl);
+	ret = v4l2_dequeue_buffer(stream->cap, &buf);
+	if (ret < 0)
+		return;
 
-		buf->bytesused = bpl * dev->height;
-		break;
-
-	case V4L2_PIX_FMT_MJPEG:
-		memcpy(buf->mem, stream->imgdata, stream->imgsize);
-		buf->bytesused = stream->imgsize;
-		break;
-	}
+	v4l2_queue_buffer(stream->uvc->vdev, &buf);
 }
 
 static void
@@ -139,16 +125,14 @@ uvc_video_process(void *d)
 	if (ret < 0)
 		return;
 
-	uvc_video_fill_buffer(stream, &buf);
-
-	v4l2_queue_buffer(stream->uvc->vdev, &buf);
+	v4l2_queue_buffer(stream->cap, &buf);
 }
 
 static int
 uvc_video_stream(struct uvc_stream *stream, int enable)
 {
+	struct v4l2_device *cap = stream->cap;
 	struct uvc_device *dev = stream->uvc;
-	unsigned int i;
 	int ret;
 
 	if (!enable) {
@@ -161,26 +145,16 @@ uvc_video_stream(struct uvc_stream *stream, int enable)
 
 	printf("Starting video stream.\n");
 
-	ret = v4l2_alloc_buffers(dev->vdev, V4L2_MEMORY_MMAP, 4);
+	ret = v4l2_alloc_buffers(dev->vdev, V4L2_MEMORY_DMABUF, 4);
 	if (ret < 0) {
-		printf("Failed to allocate buffers.\n");
+		printf("Failed to allocate buffers: %s (%d)\n", strerror(-ret), -ret);
 		return ret;
 	}
 
-	ret = v4l2_mmap_buffers(dev->vdev);
+	ret = v4l2_import_buffers(dev->vdev, dev->vdev->nbufs, cap->buffers);
 	if (ret < 0) {
-		printf("Failed to mmap buffers.\n");
+		printf("Failed to import buffers: %s (%d)\n", strerror(-ret), -ret);
 		goto error;
-	}
-
-	for (i = 0; i < dev->vdev->nbufs; ++i) {
-		struct v4l2_video_buffer *buf = &dev->vdev->buffers[i];
-
-		uvc_video_fill_buffer(stream, buf);
-
-		ret = v4l2_queue_buffer(dev->vdev, buf);
-		if (ret < 0)
-			goto error;
 	}
 
 	v4l2_stream_on(dev->vdev);
@@ -194,10 +168,60 @@ error:
 	return ret;
 }
 
-static int
-uvc_video_set_format(struct uvc_device *dev)
+static int capture_video_stream(struct uvc_stream *stream, int enable)
 {
+	struct v4l2_device *cap = stream->cap;
+	unsigned int i;
+	int ret;
+
+	if (!enable) {
+		printf("Stopping video capture stream.\n");
+		events_unwatch_fd(stream->events, cap->fd, EVENT_READ);
+		v4l2_stream_off(cap);
+		v4l2_free_buffers(cap);
+		return 0;
+	}
+
+	printf("Starting video capture stream.\n");
+
+	ret = v4l2_alloc_buffers(cap, V4L2_MEMORY_MMAP, 4);
+	if (ret < 0) {
+		printf("Failed to allocate capture buffers.\n");
+		return ret;
+	}
+
+	ret = v4l2_export_buffers(cap);
+	if (ret < 0) {
+		printf("Failed to export buffers.\n");
+		goto error;
+	}
+
+	for (i = 0; i < cap->nbufs; ++i) {
+		struct v4l2_video_buffer *buf = &cap->buffers[i];
+
+		ret = v4l2_queue_buffer(cap, buf);
+		if (ret < 0)
+			goto error;
+	}
+
+	v4l2_stream_on(cap);
+	events_watch_fd(stream->events, cap->fd, EVENT_READ,
+			capture_video_process, stream);
+
+	return 0;
+
+error:
+	v4l2_free_buffers(cap);
+	return ret;
+}
+
+static int
+uvc_video_set_format(struct uvc_stream *stream)
+{
+	struct v4l2_device *cap = stream->cap;
+	struct uvc_device *dev = stream->uvc;
 	struct v4l2_pix_format fmt;
+	int ret;
 
 	printf("Setting format to 0x%08x %ux%u\n",
 		dev->fcc, dev->width, dev->height);
@@ -210,7 +234,11 @@ uvc_video_set_format(struct uvc_device *dev)
 	if (dev->fcc == V4L2_PIX_FMT_MJPEG)
 		fmt.sizeimage = dev->maxsize * 1.5;
 
-	return v4l2_set_format(dev->vdev, &fmt);
+	ret = v4l2_set_format(dev->vdev, &fmt);
+	if (ret < 0)
+		return ret;
+
+	return v4l2_set_format(cap, &fmt);
 }
 
 static int
@@ -424,9 +452,10 @@ uvc_events_process_setup(struct uvc_device *dev,
 }
 
 static void
-uvc_events_process_data(struct uvc_device *dev,
+uvc_events_process_data(struct uvc_stream *stream,
 			const struct uvc_request_data *data)
 {
+	struct uvc_device *dev = stream->uvc;
 	const struct uvc_streaming_control *ctrl =
 		(const struct uvc_streaming_control *)&data->data;
 	struct uvc_streaming_control *target;
@@ -461,7 +490,7 @@ uvc_events_process_data(struct uvc_device *dev,
 		dev->width = frame->width;
 		dev->height = frame->height;
 
-		uvc_video_set_format(dev);
+		uvc_video_set_format(stream);
 	}
 }
 
@@ -495,15 +524,17 @@ uvc_events_process(void *d)
 		break;
 
 	case UVC_EVENT_DATA:
-		uvc_events_process_data(dev, &uvc_event->data);
+		uvc_events_process_data(stream, &uvc_event->data);
 		return;
 
 	case UVC_EVENT_STREAMON:
+		capture_video_stream(stream, 1);
 		uvc_video_stream(stream, 1);
 		return;
 
 	case UVC_EVENT_STREAMOFF:
 		uvc_video_stream(stream, 0);
+		capture_video_stream(stream, 0);
 		return;
 	}
 
@@ -539,7 +570,8 @@ uvc_events_init(struct uvc_device *dev)
  * Stream handling
  */
 
-static struct uvc_stream *uvc_stream_new(const char *device)
+static struct uvc_stream *uvc_stream_new(const char *uvc_device,
+					 const char *cap_device)
 {
 	struct uvc_stream *stream;
 
@@ -549,13 +581,22 @@ static struct uvc_stream *uvc_stream_new(const char *device)
 
 	memset(stream, 0, sizeof(*stream));
 
-	stream->uvc = uvc_open(device);
-	if (stream->uvc == NULL) {
-		free(stream);
-		return NULL;
-	}
+	stream->cap = v4l2_open(cap_device);
+	if (stream->cap == NULL)
+		goto error;
+
+	stream->uvc = uvc_open(uvc_device);
+	if (stream->uvc == NULL)
+		goto error;
 
 	return stream;
+
+error:
+	if (stream->cap)
+		v4l2_close(stream->cap);
+
+	free(stream);
+	return NULL;
 }
 
 static void uvc_stream_delete(struct uvc_stream *stream)
@@ -563,45 +604,18 @@ static void uvc_stream_delete(struct uvc_stream *stream)
 	if (stream == NULL)
 		return;
 
+	v4l2_close(stream->cap);
 	uvc_close(stream->uvc);
 
-	free(stream->imgdata);
 	free(stream);
-}
-
-static void uvc_stream_load_image(struct uvc_stream *stream, const char *img)
-{
-	int fd = -1;
-
-	if (img == NULL)
-		return;
-
-	fd = open(img, O_RDONLY);
-	if (fd == -1) {
-		printf("Unable to open MJPEG image '%s'\n", img);
-		return;
-	}
-
-	stream->imgsize = lseek(fd, 0, SEEK_END);
-	lseek(fd, 0, SEEK_SET);
-	stream->imgdata = malloc(stream->imgsize);
-	if (stream->imgdata == NULL) {
-		printf("Unable to allocate memory for MJPEG image\n");
-		stream->imgsize = 0;
-		return;
-	}
-
-	read(fd, stream->imgdata, stream->imgsize);
-	close(fd);
 }
 
 static void uvc_stream_init_uvc(struct uvc_stream *stream)
 {
 	/*
 	 * FIXME: The maximum size should be specified per format and frame.
-	 * For now just hardcode it to support MJPEG.
 	 */
-	stream->uvc->maxsize = stream->imgsize;
+	stream->uvc->maxsize = 0;
 
 	uvc_events_init(stream->uvc);
 	uvc_video_init(stream->uvc);
@@ -624,6 +638,7 @@ static void usage(const char *argv0)
 {
 	fprintf(stderr, "Usage: %s [options]\n", argv0);
 	fprintf(stderr, "Available options are\n");
+	fprintf(stderr, " -c device	V4L2 source device\n");
 	fprintf(stderr, " -d device	Video device\n");
 	fprintf(stderr, " -h		Print this help screen and exit\n");
 	fprintf(stderr, " -i image	MJPEG image\n");
@@ -640,26 +655,26 @@ static void sigint_handler(int signal __attribute__((__unused__)))
 
 int main(int argc, char *argv[])
 {
-	char *device = "/dev/video0";
+	char *uvc_device = "/dev/video0";
+	char *cap_device = "/dev/video1";
 	struct uvc_stream *stream;
 	struct events events;
-	char *mjpeg_image = NULL;
 	int ret = 0;
 	int opt;
 
-	while ((opt = getopt(argc, argv, "d:hi:")) != -1) {
+	while ((opt = getopt(argc, argv, "c:d:h")) != -1) {
 		switch (opt) {
+		case 'c':
+			cap_device = optarg;
+			break;
+
 		case 'd':
-			device = optarg;
+			uvc_device = optarg;
 			break;
 
 		case 'h':
 			usage(argv[0]);
 			return 0;
-
-		case 'i':
-			mjpeg_image = optarg;
-			break;
 
 		default:
 			fprintf(stderr, "Invalid option '-%c'\n", opt);
@@ -679,13 +694,12 @@ int main(int argc, char *argv[])
 	signal(SIGINT, sigint_handler);
 
 	/* Create and initialise the stream. */
-	stream = uvc_stream_new(device);
+	stream = uvc_stream_new(uvc_device, cap_device);
 	if (stream == NULL) {
 		ret = 1;
 		goto done;
 	}
 
-	uvc_stream_load_image(stream, mjpeg_image);
 	uvc_stream_init_uvc(stream);
 	uvc_stream_set_event_handler(stream, &events);
 
