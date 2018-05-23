@@ -57,12 +57,18 @@ struct uvc_device
 	unsigned int fcc;
 	unsigned int width;
 	unsigned int height;
+	unsigned int maxsize;
+};
+
+struct uvc_stream
+{
+	struct uvc_device *uvc;
 
 	uint8_t color;
 	unsigned int imgsize;
 	void *imgdata;
 
-	struct events events;
+	struct events *events;
 };
 
 static struct uvc_device *
@@ -82,8 +88,6 @@ uvc_open(const char *devname)
 		return NULL;
 	}
 
-	events_init(&dev->events);
-
 	return dev;
 }
 
@@ -93,7 +97,6 @@ uvc_close(struct uvc_device *dev)
 	v4l2_close(dev->vdev);
 	dev->vdev = NULL;
 
-	free(dev->imgdata);
 	free(dev);
 }
 
@@ -102,8 +105,9 @@ uvc_close(struct uvc_device *dev)
  */
 
 static void
-uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_video_buffer *buf)
+uvc_video_fill_buffer(struct uvc_stream *stream, struct v4l2_video_buffer *buf)
 {
+	struct uvc_device *dev = stream->uvc;
 	unsigned int bpl;
 	unsigned int i;
 
@@ -112,14 +116,14 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_video_buffer *buf)
 		/* Fill the buffer with video data. */
 		bpl = dev->width * 2;
 		for (i = 0; i < dev->height; ++i)
-			memset(buf->mem + i*bpl, dev->color++, bpl);
+			memset(buf->mem + i*bpl, stream->color++, bpl);
 
 		buf->bytesused = bpl * dev->height;
 		break;
 
 	case V4L2_PIX_FMT_MJPEG:
-		memcpy(buf->mem, dev->imgdata, dev->imgsize);
-		buf->bytesused = dev->imgsize;
+		memcpy(buf->mem, stream->imgdata, stream->imgsize);
+		buf->bytesused = stream->imgsize;
 		break;
 	}
 }
@@ -127,28 +131,29 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_video_buffer *buf)
 static void
 uvc_video_process(void *d)
 {
-	struct uvc_device *dev = d;
+	struct uvc_stream *stream = d;
 	struct v4l2_video_buffer buf;
 	int ret;
 
-	ret = v4l2_dequeue_buffer(dev->vdev, &buf);
+	ret = v4l2_dequeue_buffer(stream->uvc->vdev, &buf);
 	if (ret < 0)
 		return;
 
-	uvc_video_fill_buffer(dev, &buf);
+	uvc_video_fill_buffer(stream, &buf);
 
-	v4l2_queue_buffer(dev->vdev, &buf);
+	v4l2_queue_buffer(stream->uvc->vdev, &buf);
 }
 
 static int
-uvc_video_stream(struct uvc_device *dev, int enable)
+uvc_video_stream(struct uvc_stream *stream, int enable)
 {
+	struct uvc_device *dev = stream->uvc;
 	unsigned int i;
 	int ret;
 
 	if (!enable) {
 		printf("Stopping video stream.\n");
-		events_unwatch_fd(&dev->events, dev->vdev->fd, EVENT_WRITE);
+		events_unwatch_fd(stream->events, dev->vdev->fd, EVENT_WRITE);
 		v4l2_stream_off(dev->vdev);
 		v4l2_free_buffers(dev->vdev);
 		return 0;
@@ -171,7 +176,7 @@ uvc_video_stream(struct uvc_device *dev, int enable)
 	for (i = 0; i < dev->vdev->nbufs; ++i) {
 		struct v4l2_video_buffer *buf = &dev->vdev->buffers[i];
 
-		uvc_video_fill_buffer(dev, buf);
+		uvc_video_fill_buffer(stream, buf);
 
 		ret = v4l2_queue_buffer(dev->vdev, buf);
 		if (ret < 0)
@@ -179,8 +184,8 @@ uvc_video_stream(struct uvc_device *dev, int enable)
 	}
 
 	v4l2_stream_on(dev->vdev);
-	events_watch_fd(&dev->events, dev->vdev->fd, EVENT_WRITE,
-			uvc_video_process, dev);
+	events_watch_fd(stream->events, dev->vdev->fd, EVENT_WRITE,
+			uvc_video_process, stream);
 
 	return 0;
 
@@ -203,7 +208,7 @@ uvc_video_set_format(struct uvc_device *dev)
 	fmt.pixelformat = dev->fcc;
 	fmt.field = V4L2_FIELD_NONE;
 	if (dev->fcc == V4L2_PIX_FMT_MJPEG)
-		fmt.sizeimage = dev->imgsize * 1.5;
+		fmt.sizeimage = dev->maxsize * 1.5;
 
 	return v4l2_set_format(dev->vdev, &fmt);
 }
@@ -290,7 +295,7 @@ uvc_fill_streaming_control(struct uvc_device *dev,
 		ctrl->dwMaxVideoFrameSize = frame->width * frame->height * 2;
 		break;
 	case V4L2_PIX_FMT_MJPEG:
-		ctrl->dwMaxVideoFrameSize = dev->imgsize;
+		ctrl->dwMaxVideoFrameSize = dev->maxsize;
 		break;
 	}
 
@@ -463,7 +468,8 @@ uvc_events_process_data(struct uvc_device *dev,
 static void
 uvc_events_process(void *d)
 {
-	struct uvc_device *dev = d;
+	struct uvc_stream *stream = d;
+	struct uvc_device *dev = stream->uvc;
 	struct v4l2_event v4l2_event;
 	const struct uvc_event *uvc_event = (void *)&v4l2_event.u.data;
 	struct uvc_request_data resp;
@@ -493,11 +499,11 @@ uvc_events_process(void *d)
 		return;
 
 	case UVC_EVENT_STREAMON:
-		uvc_video_stream(dev, 1);
+		uvc_video_stream(stream, 1);
 		return;
 
 	case UVC_EVENT_STREAMOFF:
-		uvc_video_stream(dev, 0);
+		uvc_video_stream(stream, 0);
 		return;
 	}
 
@@ -530,10 +536,40 @@ uvc_events_init(struct uvc_device *dev)
 }
 
 /* ---------------------------------------------------------------------------
- * main
+ * Stream handling
  */
 
-static void image_load(struct uvc_device *dev, const char *img)
+static struct uvc_stream *uvc_stream_new(const char *device)
+{
+	struct uvc_stream *stream;
+
+	stream = malloc(sizeof(*stream));
+	if (stream == NULL)
+		return NULL;
+
+	memset(stream, 0, sizeof(*stream));
+
+	stream->uvc = uvc_open(device);
+	if (stream->uvc == NULL) {
+		free(stream);
+		return NULL;
+	}
+
+	return stream;
+}
+
+static void uvc_stream_delete(struct uvc_stream *stream)
+{
+	if (stream == NULL)
+		return;
+
+	uvc_close(stream->uvc);
+
+	free(stream->imgdata);
+	free(stream);
+}
+
+static void uvc_stream_load_image(struct uvc_stream *stream, const char *img)
 {
 	int fd = -1;
 
@@ -546,18 +582,43 @@ static void image_load(struct uvc_device *dev, const char *img)
 		return;
 	}
 
-	dev->imgsize = lseek(fd, 0, SEEK_END);
+	stream->imgsize = lseek(fd, 0, SEEK_END);
 	lseek(fd, 0, SEEK_SET);
-	dev->imgdata = malloc(dev->imgsize);
-	if (dev->imgdata == NULL) {
+	stream->imgdata = malloc(stream->imgsize);
+	if (stream->imgdata == NULL) {
 		printf("Unable to allocate memory for MJPEG image\n");
-		dev->imgsize = 0;
+		stream->imgsize = 0;
 		return;
 	}
 
-	read(fd, dev->imgdata, dev->imgsize);
+	read(fd, stream->imgdata, stream->imgsize);
 	close(fd);
 }
+
+static void uvc_stream_init_uvc(struct uvc_stream *stream)
+{
+	/*
+	 * FIXME: The maximum size should be specified per format and frame.
+	 * For now just hardcode it to support MJPEG.
+	 */
+	stream->uvc->maxsize = stream->imgsize;
+
+	uvc_events_init(stream->uvc);
+	uvc_video_init(stream->uvc);
+}
+
+static void uvc_stream_set_event_handler(struct uvc_stream *stream,
+					 struct events *events)
+{
+	stream->events = events;
+
+	events_watch_fd(stream->events, stream->uvc->vdev->fd, EVENT_EXCEPTION,
+			uvc_events_process, stream);
+}
+
+/* ---------------------------------------------------------------------------
+ * main
+ */
 
 static void usage(const char *argv0)
 {
@@ -569,19 +630,21 @@ static void usage(const char *argv0)
 }
 
 /* Necessary for and only used by signal handler. */
-static struct uvc_device *uvc_device;
+static struct events *sigint_events;
 
 static void sigint_handler(int signal __attribute__((__unused__)))
 {
 	/* Stop the main loop when the user presses CTRL-C */
-	events_stop(&uvc_device->events);
+	events_stop(sigint_events);
 }
 
 int main(int argc, char *argv[])
 {
 	char *device = "/dev/video0";
-	struct uvc_device *dev;
+	struct uvc_stream *stream;
+	struct events events;
 	char *mjpeg_image = NULL;
+	int ret = 0;
 	int opt;
 
 	while ((opt = getopt(argc, argv, "d:hi:")) != -1) {
@@ -605,30 +668,34 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	dev = uvc_open(device);
-	if (dev == NULL)
-		return 1;
-
-	image_load(dev, mjpeg_image);
-
-	uvc_events_init(dev);
-	uvc_video_init(dev);
-
 	/*
-	 * Register a signal handler for SIGINT, received when the user presses
-	 * CTRL-C. This will allow the main loop to be interrupted, and resources
-	 * to be freed cleanly.
+	 * Create the events handler. Register a signal handler for SIGINT,
+	 * received when the user presses CTRL-C. This will allow the main loop
+	 * to be interrupted, and resources to be freed cleanly.
 	 */
-	uvc_device = dev;
+	events_init(&events);
+
+	sigint_events = &events;
 	signal(SIGINT, sigint_handler);
 
-	events_watch_fd(&dev->events, dev->vdev->fd, EVENT_EXCEPTION,
-			uvc_events_process, dev);
+	/* Create and initialise the stream. */
+	stream = uvc_stream_new(device);
+	if (stream == NULL) {
+		ret = 1;
+		goto done;
+	}
+
+	uvc_stream_load_image(stream, mjpeg_image);
+	uvc_stream_init_uvc(stream);
+	uvc_stream_set_event_handler(stream, &events);
 
 	/* Main capture loop */
-	events_loop(&dev->events);
+	events_loop(&events);
 
-	events_cleanup(&dev->events);
-	uvc_close(dev);
-	return 0;
+done:
+	/* Cleanup */
+	uvc_stream_delete(stream);
+	events_cleanup(&events);
+
+	return ret;
 }
