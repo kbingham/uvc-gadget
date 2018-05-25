@@ -7,9 +7,15 @@ KERNEL_INCLUDE	:= -I$(KERNEL_DIR)/include -I$(KERNEL_DIR)/arch/$(ARCH)/include
 CFLAGS		:= -W -Wall -g $(KERNEL_INCLUDE)
 LDFLAGS		:= -g
 
+OBJS		:= \
+			configfs.o \
+			events.o \
+			uvc-gadget.o \
+			v4l2.o
+
 all: uvc-gadget
 
-uvc-gadget: events.o uvc-gadget.o v4l2.o
+uvc-gadget: $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^
 
 clean:

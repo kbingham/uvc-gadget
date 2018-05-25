@@ -38,6 +38,7 @@
 #include <linux/usb/video.h>
 #include <linux/videodev2.h>
 
+#include "configfs.h"
 #include "events.h"
 #include "tools.h"
 #include "v4l2.h"
@@ -636,12 +637,30 @@ static void uvc_stream_set_event_handler(struct uvc_stream *stream,
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "Usage: %s [options]\n", argv0);
+	fprintf(stderr, "Usage: %s [options] <uvc device>\n", argv0);
 	fprintf(stderr, "Available options are\n");
 	fprintf(stderr, " -c device	V4L2 source device\n");
-	fprintf(stderr, " -d device	Video device\n");
 	fprintf(stderr, " -h		Print this help screen and exit\n");
 	fprintf(stderr, " -i image	MJPEG image\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, " <uvc device>	UVC device instance specifier\n");
+	fprintf(stderr, "\n");
+
+	fprintf(stderr, "  For ConfigFS devices the <uvc device> parameter can take the form of a shortened\n");
+	fprintf(stderr, "  function specifier such as: 'uvc.0', or if multiple gadgets are configured, the\n");
+	fprintf(stderr, "  gadget name should be included to prevent ambiguity: 'g1/functions/uvc.0'.\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "  For legacy g_webcam UVC instances, this parameter will identify the UDC that the\n");
+	fprintf(stderr, "  UVC function is bound to.\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "  The parameter is optional, and if not provided the first UVC function on the first\n");
+	fprintf(stderr, "  gadget identified will be used.\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "Example usage:\n");
+	fprintf(stderr, "    uvc-gadget uvc.1\n");
+	fprintf(stderr, "    uvc-gadget g1/functions/uvc.1\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "    uvc-gadget musb-hdrc.0.auto\n");
 }
 
 /* Necessary for and only used by signal handler. */
@@ -655,21 +674,18 @@ static void sigint_handler(int signal __attribute__((__unused__)))
 
 int main(int argc, char *argv[])
 {
-	char *uvc_device = "/dev/video0";
+	char *function = NULL;
 	char *cap_device = "/dev/video1";
+	struct uvc_function_config *fc;
 	struct uvc_stream *stream;
 	struct events events;
 	int ret = 0;
 	int opt;
 
-	while ((opt = getopt(argc, argv, "c:d:h")) != -1) {
+	while ((opt = getopt(argc, argv, "c:h")) != -1) {
 		switch (opt) {
 		case 'c':
 			cap_device = optarg;
-			break;
-
-		case 'd':
-			uvc_device = optarg;
 			break;
 
 		case 'h':
@@ -683,6 +699,15 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	if (argv[optind] != NULL)
+		function = argv[optind];
+
+	fc = configfs_parse_uvc_function(function);
+	if (!fc) {
+		printf("Failed to identify function configuration\n");
+		return 1;
+	}
+
 	/*
 	 * Create the events handler. Register a signal handler for SIGINT,
 	 * received when the user presses CTRL-C. This will allow the main loop
@@ -694,7 +719,7 @@ int main(int argc, char *argv[])
 	signal(SIGINT, sigint_handler);
 
 	/* Create and initialise the stream. */
-	stream = uvc_stream_new(uvc_device, cap_device);
+	stream = uvc_stream_new(fc->video, cap_device);
 	if (stream == NULL) {
 		ret = 1;
 		goto done;
@@ -710,6 +735,7 @@ done:
 	/* Cleanup */
 	uvc_stream_delete(stream);
 	events_cleanup(&events);
+	configfs_free_uvc_function(fc);
 
 	return ret;
 }
