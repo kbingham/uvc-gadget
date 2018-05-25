@@ -14,6 +14,9 @@ struct uvc_function_config {
 	char *video;
 	char *udc;
 
+	unsigned int control_interface;
+	unsigned int streaming_interface;
+
 	unsigned int streaming_interval;
 	unsigned int streaming_maxburst;
 	unsigned int streaming_maxpacket;

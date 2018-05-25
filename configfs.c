@@ -199,6 +199,9 @@ static char *udc_find_video_device(const char *udc, const char *function)
  */
 
 static const struct uvc_function_config g_webcam_config = {
+	.control_interface = 0,
+	.streaming_interface = 1,
+
 	.streaming_interval = 1,
 	.streaming_maxburst = 0,
 	.streaming_maxpacket = 1024,
@@ -266,6 +269,26 @@ void configfs_free_uvc_function(struct uvc_function_config *fc)
 	free(fc);
 }
 
+static int configfs_parse_interfaces(const char *fpath,
+				     struct uvc_function_config *fc)
+{
+	int ret;
+
+	ret = attribute_read_uint(fpath, "control/bInterfaceNumber",
+				  &fc->control_interface);
+
+	ret = ret ? : attribute_read_uint(fpath, "streaming/bInterfaceNumber",
+					  &fc->streaming_interface);
+
+	if (ret) {
+		printf("Failed to obtain interface numbers, using defaults\n");
+		fc->control_interface = 0;
+		fc->streaming_interface = 1;
+	}
+
+	return 0;
+}
+
 /*
  * configfs_parse_uvc_function - Parse a UVC function configuration in ConfigFS
  * @function: The function name
@@ -322,6 +345,9 @@ struct uvc_function_config *configfs_parse_uvc_function(const char *function)
 	fc->video = udc_find_video_device(fc->udc, function);
 	if (!fc->video)
 		ret = -ENODEV;
+
+	/* Identify interface numbers, or fall back to defaults. */
+	configfs_parse_interfaces(fpath, fc);
 
 	ret = ret ? : attribute_read_uint(fpath, "streaming_interval",
 					  &fc->streaming_interval);

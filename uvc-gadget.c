@@ -43,12 +43,11 @@
 #include "tools.h"
 #include "v4l2.h"
 
-#define UVC_INTF_CONTROL	0
-#define UVC_INTF_STREAMING	1
-
 struct uvc_device
 {
 	struct v4l2_device *vdev;
+
+	struct uvc_function_config *fc;
 
 	struct uvc_streaming_control probe;
 	struct uvc_streaming_control commit;
@@ -410,21 +409,15 @@ uvc_events_process_class(struct uvc_device *dev,
 			 const struct usb_ctrlrequest *ctrl,
 			 struct uvc_request_data *resp)
 {
+	unsigned int interface = ctrl->wIndex & 0xff;
+
 	if ((ctrl->bRequestType & USB_RECIP_MASK) != USB_RECIP_INTERFACE)
 		return;
 
-	switch (ctrl->wIndex & 0xff) {
-	case UVC_INTF_CONTROL:
+	if (interface == dev->fc->control_interface)
 		uvc_events_process_control(dev, ctrl->bRequest, ctrl->wValue >> 8, resp);
-		break;
-
-	case UVC_INTF_STREAMING:
+	else if (interface == dev->fc->streaming_interface)
 		uvc_events_process_streaming(dev, ctrl->bRequest, ctrl->wValue >> 8, resp);
-		break;
-
-	default:
-		break;
-	}
 }
 
 static void
@@ -611,12 +604,14 @@ static void uvc_stream_delete(struct uvc_stream *stream)
 	free(stream);
 }
 
-static void uvc_stream_init_uvc(struct uvc_stream *stream)
+static void uvc_stream_init_uvc(struct uvc_stream *stream,
+				struct uvc_function_config *fc)
 {
 	/*
 	 * FIXME: The maximum size should be specified per format and frame.
 	 */
 	stream->uvc->maxsize = 0;
+	stream->uvc->fc = fc;
 
 	uvc_events_init(stream->uvc);
 	uvc_video_init(stream->uvc);
@@ -725,7 +720,7 @@ int main(int argc, char *argv[])
 		goto done;
 	}
 
-	uvc_stream_init_uvc(stream);
+	uvc_stream_init_uvc(stream, fc);
 	uvc_stream_set_event_handler(stream, &events);
 
 	/* Main capture loop */
