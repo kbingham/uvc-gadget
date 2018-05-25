@@ -298,7 +298,7 @@ uvc_fill_streaming_control(struct uvc_device *dev,
 		break;
 	}
 
-	ctrl->dwMaxPayloadTransferSize = 512;	/* TODO this should be filled by the driver. */
+	ctrl->dwMaxPayloadTransferSize = dev->fc->streaming.ep.wMaxPacketSize;
 	ctrl->bmFramingInfo = 3;
 	ctrl->bPreferedVersion = 1;
 	ctrl->bMaxVersion = 1;
