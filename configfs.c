@@ -10,6 +10,7 @@
 /* To provide basename and asprintf from the GNU library. */
  #define _GNU_SOURCE
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <glob.h>
@@ -19,7 +20,10 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <linux/videodev2.h>
+
 #include "configfs.h"
+#include "tools.h"
 
 /* -----------------------------------------------------------------------------
  * Path handling and support
@@ -47,6 +51,36 @@ static char *path_glob_first_match(const char *g)
 	globfree(&globbuf);
 
 	return match;
+}
+
+/*
+ * Find and return the full path of the first directory entry that satisfies
+ * the match function.
+ */
+static char *dir_first_match(const char *dir, int(*match)(const struct dirent *))
+{
+	struct dirent **entries;
+	unsigned int i;
+	int n_entries;
+	char *path;
+
+	n_entries = scandir(dir, &entries, match, alphasort);
+	if (n_entries < 0)
+		return NULL;
+
+	if (n_entries == 0) {
+		free(entries);
+		return NULL;
+	}
+
+	path = path_join(dir, entries[0]->d_name);
+
+	for (i = 0; i < (unsigned int)n_entries; ++i)
+		free(entries[i]);
+
+	free(entries);
+
+	return path;
 }
 
 /* -----------------------------------------------------------------------------
@@ -196,6 +230,33 @@ static char *udc_find_video_device(const char *udc, const char *function)
 	return video;
 }
 
+/* ------------------------------------------------------------------------
+ * GUIDs and formats
+ */
+
+#define UVC_GUID_FORMAT_MJPEG \
+	{ 'M',  'J',  'P',  'G', 0x00, 0x00, 0x10, 0x00, \
+	 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}
+#define UVC_GUID_FORMAT_YUY2 \
+	{ 'Y',  'U',  'Y',  '2', 0x00, 0x00, 0x10, 0x00, \
+	 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}
+
+struct uvc_function_format_info {
+	uint8_t guid[16];
+	uint32_t fcc;
+};
+
+static struct uvc_function_format_info uvc_formats[] = {
+	{
+		.guid		= UVC_GUID_FORMAT_YUY2,
+		.fcc		= V4L2_PIX_FMT_YUYV,
+	},
+	{
+		.guid		= UVC_GUID_FORMAT_MJPEG,
+		.fcc		= V4L2_PIX_FMT_MJPEG,
+	},
+};
+
 /* -----------------------------------------------------------------------------
  * Legacy g_webcam support
  */
@@ -215,13 +276,107 @@ static const struct uvc_function_config g_webcam_config = {
 			.bMaxBurst = 0,
 			.wMaxPacketSize = 1024,
 		},
+		.num_formats = 2,
+		.formats = (struct uvc_function_config_format[]) {
+			{
+				.index = 1,
+				.guid = UVC_GUID_FORMAT_YUY2,
+				.fcc = V4L2_PIX_FMT_YUYV,
+				.num_frames = 2,
+				.frames = (struct uvc_function_config_frame[]) {
+					{
+						.index = 1,
+						.width = 640,
+						.height = 360,
+						.num_intervals = 3,
+						.intervals = (unsigned int[]) {
+							666666,
+							10000000,
+							50000000,
+						},
+					}, {
+						.index = 2,
+						.width = 1280,
+						.height = 720,
+						.num_intervals = 1,
+						.intervals = (unsigned int[]) {
+							50000000,
+						},
+					},
+				},
+			}, {
+				.index = 2,
+				.guid = UVC_GUID_FORMAT_MJPEG,
+				.fcc = V4L2_PIX_FMT_MJPEG,
+				.num_frames = 2,
+				.frames = (struct uvc_function_config_frame[]) {
+					{
+						.index = 1,
+						.width = 640,
+						.height = 360,
+						.num_intervals = 3,
+						.intervals = (unsigned int[]) {
+							666666,
+							10000000,
+							50000000,
+						},
+					}, {
+						.index = 2,
+						.width = 1280,
+						.height = 720,
+						.num_intervals = 1,
+						.intervals = (unsigned int[]) {
+							50000000,
+						},
+					},
+				},
+			},
+		},
 	},
 };
 
 static int parse_legacy_g_webcam(const char *udc,
 				 struct uvc_function_config *fc)
 {
+	void *memdup(const void *src, size_t size)
+	{
+		void *dst;
+
+		dst = malloc(size);
+		if (!dst)
+			return NULL;
+		memcpy(dst, src, size);
+		return dst;
+	}
+
+	unsigned int i, j;
+	size_t size;
+
 	*fc = g_webcam_config;
+
+	/*
+	 * We need to duplicate all sub-structures as the
+	 * configfs_free_uvc_function() function expects them to be dynamically
+	 * allocated.
+	 */
+	size = sizeof *fc->streaming.formats * fc->streaming.num_formats;
+	fc->streaming.formats = memdup(fc->streaming.formats, size);
+
+	for (i = 0; i < fc->streaming.num_formats; ++i) {
+		struct uvc_function_config_format *format =
+			&fc->streaming.formats[i];
+
+		size = sizeof *format->frames * format->num_frames;
+		format->frames = memdup(format->frames, size);
+
+		for (j = 0; j < format->num_frames; ++j) {
+			struct uvc_function_config_frame *frame =
+				&format->frames[j];
+
+			size = sizeof *frame->intervals * frame->num_intervals;
+			frame->intervals = memdup(frame->intervals, size);
+		}
+	}
 
 	fc->video = udc_find_video_device(udc, NULL);
 
@@ -274,9 +429,26 @@ static char *configfs_find_uvc_function(const char *function)
  */
 void configfs_free_uvc_function(struct uvc_function_config *fc)
 {
+	unsigned int i, j;
+
 	free(fc->udc);
 	free(fc->video);
 
+	for (i = 0; i < fc->streaming.num_formats; ++i) {
+		struct uvc_function_config_format *format =
+			&fc->streaming.formats[i];
+
+		for (j = 0; j < format->num_frames; ++j) {
+			struct uvc_function_config_frame *frame =
+				&format->frames[j];
+
+			free(frame->intervals);
+		}
+
+		free(format->frames);
+	}
+
+	free(fc->streaming.formats);
 	free(fc);
 }
 
@@ -317,13 +489,267 @@ static int configfs_parse_control(const char *path,
 	return ret;
 }
 
+static int configfs_parse_streaming_frame(const char *path,
+			struct uvc_function_config_frame *frame)
+{
+	char *intervals;
+	char *p;
+	int ret = 0;
+
+	/*
+	 * No driver support for bFrameIndex yet.
+	 *
+	 * ret = ret ? : attribute_read_uint(path, "bFrameIndex", &frame->index);
+	 */
+
+	ret = ret ? : attribute_read_uint(path, "wWidth", &frame->width);
+	ret = ret ? : attribute_read_uint(path, "wHeight", &frame->height);
+	if (ret)
+		return ret;
+
+	intervals = attribute_read_str(path, "dwFrameInterval");
+	if (!intervals)
+		return -EINVAL;
+
+	for (p = intervals; *p; ) {
+		unsigned int interval;
+		unsigned int *mem;
+		char *endp;
+		size_t size;
+
+		interval = strtoul(p, &endp, 10);
+		if (*endp != '\0' && *endp != '\n') {
+			ret = -EINVAL;
+			break;
+		}
+
+		p = *endp ? endp + 1 : endp;
+
+		size = sizeof *frame->intervals * (frame->num_intervals + 1);
+		mem = realloc(frame->intervals, size);
+		if (!mem) {
+			ret = -ENOMEM;
+			break;
+		}
+
+		frame->intervals = mem;
+		frame->intervals[frame->num_intervals++] = interval;
+	}
+
+	free(intervals);
+
+	return ret;
+}
+
+static int configfs_parse_streaming_format(const char *path,
+			struct uvc_function_config_format *format)
+{
+	int frame_filter(const struct dirent *ent)
+	{
+		/* Accept all directories but "." and "..". */
+		if (ent->d_type != DT_DIR)
+			return 0;
+		if (!strcmp(ent->d_name, "."))
+			return 0;
+		if (!strcmp(ent->d_name, ".."))
+			return 0;
+		return 1;
+	}
+
+	int frame_compare(const void *a, const void *b)
+	{
+		const struct uvc_function_config_frame *fa = a;
+		const struct uvc_function_config_frame *fb = b;
+
+		if (fa->index < fb->index)
+			return -1;
+		else if (fa->index == fb->index)
+			return 0;
+		else
+			return 1;
+	}
+
+	struct dirent **entries;
+	unsigned int i;
+	int n_entries;
+	int ret;
+
+	ret = attribute_read_uint(path, "bFormatIndex", &format->index);
+	if (ret < 0)
+		return ret;
+
+	ret = attribute_read(path, "guidFormat", format->guid,
+			     sizeof(format->guid));
+	if (ret < 0)
+		return ret;
+	if (ret != 16)
+		return -EINVAL;
+
+	for (i = 0; i < ARRAY_SIZE(uvc_formats); ++i) {
+		if (!memcmp(uvc_formats[i].guid, format->guid, 16)) {
+			format->fcc = uvc_formats[i].fcc;
+			break;
+		}
+	}
+
+	/* Find all entries corresponding to a frame and parse them. */
+	n_entries = scandir(path, &entries, frame_filter, alphasort);
+	if (n_entries < 0)
+		return -errno;
+
+	if (n_entries == 0) {
+		free(entries);
+		return -EINVAL;
+	}
+
+	format->num_frames = n_entries;
+	format->frames = calloc(sizeof *format->frames, format->num_frames);
+	if (!format->frames)
+		return -ENOMEM;
+
+	for (i = 0; i < (unsigned int)n_entries; ++i) {
+		char *frame;
+
+		frame = path_join(path, entries[i]->d_name);
+		if (!frame) {
+			ret = -ENOMEM;
+			goto done;
+		}
+
+		ret = configfs_parse_streaming_frame(frame, &format->frames[i]);
+		free(frame);
+		if (ret < 0)
+			goto done;
+	}
+
+	/* Sort the frames by index. */
+	qsort(format->frames, format->num_frames, sizeof *format->frames,
+	      frame_compare);
+
+done:
+	for (i = 0; i < (unsigned int)n_entries; ++i)
+		free(entries[i]);
+	free(entries);
+
+	return ret;
+}
+
+static int configfs_parse_streaming_header(const char *path,
+			struct uvc_function_config_streaming *cfg)
+{
+	int format_filter(const struct dirent *ent)
+	{
+		char *path;
+		bool valid;
+
+		/*
+		 * Accept all links that point to a directory containing a
+		 * "bFormatIndex" file.
+		 */
+		if (ent->d_type != DT_LNK)
+			return 0;
+
+		path = path_join(ent->d_name, "bFormatIndex");
+		if (!path)
+			return 0;
+
+		valid = access(path, R_OK);
+		free(path);
+		return valid;
+	}
+
+	int format_compare(const void *a, const void *b)
+	{
+		const struct uvc_function_config_format *fa = a;
+		const struct uvc_function_config_format *fb = b;
+
+		if (fa->index < fb->index)
+			return -1;
+		else if (fa->index == fb->index)
+			return 0;
+		else
+			return 1;
+	}
+
+	struct dirent **entries;
+	unsigned int i;
+	int n_entries;
+	int ret;
+
+	/* Find all entries corresponding to a format and parse them. */
+	n_entries = scandir(path, &entries, format_filter, alphasort);
+	if (n_entries < 0)
+		return -errno;
+
+	if (n_entries == 0) {
+		free(entries);
+		return -EINVAL;
+	}
+
+	cfg->num_formats = n_entries;
+	cfg->formats = calloc(sizeof *cfg->formats, cfg->num_formats);
+	if (!cfg->formats)
+		return -ENOMEM;
+
+	for (i = 0; i < (unsigned int)n_entries; ++i) {
+		char *format;
+
+		format = path_join(path, entries[i]->d_name);
+		if (!format) {
+			ret = -ENOMEM;
+			goto done;
+		}
+
+		ret = configfs_parse_streaming_format(format, &cfg->formats[i]);
+		free(format);
+		if (ret < 0)
+			goto done;
+	}
+
+	/* Sort the formats by index. */
+	qsort(cfg->formats, cfg->num_formats, sizeof *cfg->formats,
+	      format_compare);
+
+done:
+	for (i = 0; i < (unsigned int)n_entries; ++i)
+		free(entries[i]);
+	free(entries);
+
+	return ret;
+}
+
 static int configfs_parse_streaming(const char *path,
 				    struct uvc_function_config_streaming *cfg)
 {
+	int link_filter(const struct dirent *ent)
+	{
+		/* Accept all links. */
+		return ent->d_type == DT_LNK;
+	}
+
+	char *header;
+	char *class;
 	int ret;
 
 	ret = configfs_parse_interface(path, &cfg->intf);
+	if (ret < 0)
+		return ret;
 
+	/*
+	 * Handle the high-speed class descriptors only for now. Find the first
+	 * link to the class descriptors.
+	 */
+	class = path_join(path, "class/hs");
+	if (!class)
+		return -ENOMEM;
+
+	header = dir_first_match(class, link_filter);
+	free(class);
+	if (!header)
+		return -EINVAL;
+
+	ret = configfs_parse_streaming_header(header, cfg);
+	free(header);
 	return ret;
 }
 

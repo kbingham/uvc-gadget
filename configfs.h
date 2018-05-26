@@ -10,6 +10,8 @@
 #ifndef __CONFIGFS_H__
 #define __CONFIGFS_H__
 
+#include <stdint.h>
+
 /*
  * struct uvc_function_config_endpoint - Endpoint parameters
  * @bInterval: Transfer interval (interrupt and isochronous only)
@@ -39,13 +41,50 @@ struct uvc_function_config_control {
 };
 
 /*
+ * struct uvc_function_config_frame - Streaming frame parameters
+ * @index: Frame index in the UVC descriptors
+ * @width: Frame width in pixels
+ * @height: Frame height in pixels
+ * @num_intervals: Number of entries in the intervals array
+ * @intervals: Array of frame intervals
+ */
+struct uvc_function_config_frame {
+	unsigned int index;
+	unsigned int width;
+	unsigned int height;
+	unsigned int num_intervals;
+	unsigned int *intervals;
+};
+
+/*
+ * struct uvc_function_config_format - Streaming format parameters
+ * @index: Format index in the UVC descriptors
+ * @guid: Format GUID
+ * @fcc: V4L2 pixel format
+ * @num_frames: Number of entries in the frames array
+ * @frames: Array of frame descriptors
+ */
+struct uvc_function_config_format {
+	unsigned int index;
+	uint8_t guid[16];
+	unsigned int fcc;
+	unsigned int num_frames;
+	struct uvc_function_config_frame *frames;
+};
+
+/*
  * struct uvc_function_config_streaming - Streaming interface parameters
  * @intf: Generic interface parameters
  * @ep: Endpoint parameters
+ * @num_formats: Number of entries in the formats array
+ * @formats: Array of format descriptors
  */
 struct uvc_function_config_streaming {
 	struct uvc_function_config_interface intf;
 	struct uvc_function_config_endpoint ep;
+
+	unsigned int num_formats;
+	struct uvc_function_config_format *formats;
 };
 
 /*
