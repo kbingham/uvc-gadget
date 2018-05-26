@@ -280,13 +280,7 @@ static int configfs_parse_interfaces(const char *fpath,
 	ret = ret ? : attribute_read_uint(fpath, "streaming/bInterfaceNumber",
 					  &fc->streaming_interface);
 
-	if (ret) {
-		printf("Failed to obtain interface numbers, using defaults\n");
-		fc->control_interface = 0;
-		fc->streaming_interface = 1;
-	}
-
-	return 0;
+	return ret;
 }
 
 /*
@@ -346,8 +340,8 @@ struct uvc_function_config *configfs_parse_uvc_function(const char *function)
 	if (!fc->video)
 		ret = -ENODEV;
 
-	/* Identify interface numbers, or fall back to defaults. */
-	configfs_parse_interfaces(fpath, fc);
+	/* Identify interface numbers. */
+	ret = ret ? : configfs_parse_interfaces(fpath, fc);
 
 	ret = ret ? : attribute_read_uint(fpath, "streaming_interval",
 					  &fc->streaming_interval);
