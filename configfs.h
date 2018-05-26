@@ -10,6 +10,16 @@
 #ifndef __CONFIGFS_H__
 #define __CONFIGFS_H__
 
+/*
+ * struct uvc_function_config - UVC function configuration parameters
+ * @video: Full path to the video device node
+ * @udc: UDC name
+ * @control_interface: Control interface number
+ * @streaming_interface: Streaming interface number
+ * @streaming_interval: Isochronous interval for the streaming endpoint
+ * @streaming_maxburts: Isochronous maximum burst for the streaming endpoint
+ * @streaming_maxpacket: Isochronous maximum packets for the streaming endpoint
+ */
 struct uvc_function_config {
 	char *video;
 	char *udc;
