@@ -414,9 +414,9 @@ uvc_events_process_class(struct uvc_device *dev,
 	if ((ctrl->bRequestType & USB_RECIP_MASK) != USB_RECIP_INTERFACE)
 		return;
 
-	if (interface == dev->fc->control_interface)
+	if (interface == dev->fc->control.intf.bInterfaceNumber)
 		uvc_events_process_control(dev, ctrl->bRequest, ctrl->wValue >> 8, resp);
-	else if (interface == dev->fc->streaming_interface)
+	else if (interface == dev->fc->streaming.intf.bInterfaceNumber)
 		uvc_events_process_streaming(dev, ctrl->bRequest, ctrl->wValue >> 8, resp);
 }
 

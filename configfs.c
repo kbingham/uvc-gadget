@@ -199,12 +199,21 @@ static char *udc_find_video_device(const char *udc, const char *function)
  */
 
 static const struct uvc_function_config g_webcam_config = {
-	.control_interface = 0,
-	.streaming_interface = 1,
-
-	.streaming_interval = 1,
-	.streaming_maxburst = 0,
-	.streaming_maxpacket = 1024,
+	.control = {
+		.intf = {
+			.bInterfaceNumber = 0,
+		},
+	},
+	.streaming = {
+		.intf = {
+			.bInterfaceNumber = 1,
+		},
+		.ep = {
+			.bInterval = 1,
+			.bMaxBurst = 0,
+			.wMaxPacketSize = 1024,
+		},
+	},
 };
 
 static int parse_legacy_g_webcam(const char *udc,
@@ -269,16 +278,74 @@ void configfs_free_uvc_function(struct uvc_function_config *fc)
 	free(fc);
 }
 
-static int configfs_parse_interfaces(const char *fpath,
-				     struct uvc_function_config *fc)
+#define configfs_parse_child(parent, child, cfg, parse)			\
+({									\
+	char *__path;							\
+	int __ret;							\
+									\
+	__path = path_join((parent), (child));				\
+	if (__path) {							\
+		__ret = parse(__path, (cfg));				\
+		free(__path);						\
+	} else {							\
+		__ret = -ENOMEM;					\
+	}								\
+									\
+	__ret;								\
+})
+
+static int configfs_parse_interface(const char *path,
+				    struct uvc_function_config_interface *cfg)
 {
 	int ret;
 
-	ret = attribute_read_uint(fpath, "control/bInterfaceNumber",
-				  &fc->control_interface);
+	ret = attribute_read_uint(path, "bInterfaceNumber",
+				  &cfg->bInterfaceNumber);
 
-	ret = ret ? : attribute_read_uint(fpath, "streaming/bInterfaceNumber",
-					  &fc->streaming_interface);
+	return ret;
+}
+
+static int configfs_parse_control(const char *path,
+				  struct uvc_function_config_control *cfg)
+{
+	int ret;
+
+	ret = configfs_parse_interface(path, &cfg->intf);
+
+	return ret;
+}
+
+static int configfs_parse_streaming(const char *path,
+				    struct uvc_function_config_streaming *cfg)
+{
+	int ret;
+
+	ret = configfs_parse_interface(path, &cfg->intf);
+
+	return ret;
+}
+
+static int configfs_parse_uvc(const char *fpath,
+			      struct uvc_function_config *fc)
+{
+	int ret = 0;
+
+	ret = ret ? : configfs_parse_child(fpath, "control", &fc->control,
+					   configfs_parse_control);
+	ret = ret ? : configfs_parse_child(fpath, "streaming", &fc->streaming,
+					   configfs_parse_streaming);
+
+	/*
+	 * These parameters should be part of the streaming interface in
+	 * ConfigFS, but for legacy reasons they are located directly in the
+	 * function directory.
+	 */
+	ret = ret ? : attribute_read_uint(fpath, "streaming_interval",
+					  &fc->streaming.ep.bInterval);
+	ret = ret ? : attribute_read_uint(fpath, "streaming_maxburst",
+					  &fc->streaming.ep.bMaxBurst);
+	ret = ret ? : attribute_read_uint(fpath, "streaming_maxpacket",
+					  &fc->streaming.ep.wMaxPacketSize);
 
 	return ret;
 }
@@ -337,21 +404,14 @@ struct uvc_function_config *configfs_parse_uvc_function(const char *function)
 
 	fc->udc = attribute_read_str(fpath, "../../UDC");
 	fc->video = udc_find_video_device(fc->udc, function);
-	if (!fc->video)
+	if (!fc->video) {
 		ret = -ENODEV;
+		goto done;
+	}
 
-	/* Identify interface numbers. */
-	ret = ret ? : configfs_parse_interfaces(fpath, fc);
+	ret = configfs_parse_uvc(fpath, fc);
 
-	ret = ret ? : attribute_read_uint(fpath, "streaming_interval",
-					  &fc->streaming_interval);
-
-	ret = ret ? : attribute_read_uint(fpath, "streaming_maxburst",
-					  &fc->streaming_maxburst);
-
-	ret = ret ? : attribute_read_uint(fpath, "streaming_maxpacket",
-					  &fc->streaming_maxpacket);
-
+done:
 	if (ret) {
 		configfs_free_uvc_function(fc);
 		fc = NULL;
