@@ -53,7 +53,7 @@ static char *path_glob_first_match(const char *g)
  * Attribute handling
  */
 
-static int attribute_read(const char *path, const char *file, char *buf,
+static int attribute_read(const char *path, const char *file, void *buf,
 			  unsigned int len)
 {
 	char *f;
@@ -72,7 +72,7 @@ static int attribute_read(const char *path, const char *file, char *buf,
 		return -ENOENT;
 	}
 
-	ret = read(fd, buf, len - 1);
+	ret = read(fd, buf, len);
 	close(fd);
 
 	if (ret < 0) {
@@ -81,9 +81,7 @@ static int attribute_read(const char *path, const char *file, char *buf,
 		return -ENODATA;
 	}
 
-	buf[ret] = '\0';
-
-	return 0;
+	return len;
 }
 
 static int attribute_read_uint(const char *path, const char *file,
@@ -94,9 +92,11 @@ static int attribute_read_uint(const char *path, const char *file,
 	char *endptr;
 	int ret;
 
-	ret = attribute_read(path, file, buf, sizeof(buf));
-	if (ret)
+	ret = attribute_read(path, file, buf, sizeof(buf) - 1);
+	if (ret < 0)
 		return ret;
+
+	buf[ret] = '\0';
 
 	errno = 0;
 
@@ -117,9 +117,11 @@ static char *attribute_read_str(const char *path, const char *file)
 	char *p;
 	int ret;
 
-	ret = attribute_read(path, file, buf, sizeof(buf));
-	if (ret)
+	ret = attribute_read(path, file, buf, sizeof(buf) - 1);
+	if (ret < 0)
 		return NULL;
+
+	buf[ret] = '\0';
 
 	p = strrchr(buf, '\n');
 	if (p != buf)
