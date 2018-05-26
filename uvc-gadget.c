@@ -251,45 +251,14 @@ uvc_video_init(struct uvc_device *dev __attribute__((__unused__)))
  * Request processing
  */
 
-struct uvc_frame_info
-{
-	unsigned int width;
-	unsigned int height;
-	unsigned int intervals[8];
-};
-
-struct uvc_format_info
-{
-	unsigned int fcc;
-	const struct uvc_frame_info *frames;
-};
-
-static const struct uvc_frame_info uvc_frames_yuyv[] = {
-	{  640, 360, { 666666, 10000000, 50000000, 0 }, },
-	{ 1280, 720, { 50000000, 0 }, },
-	{ 0, 0, { 0, }, },
-};
-
-static const struct uvc_frame_info uvc_frames_mjpeg[] = {
-	{  640, 360, { 666666, 10000000, 50000000, 0 }, },
-	{ 1280, 720, { 50000000, 0 }, },
-	{ 0, 0, { 0, }, },
-};
-
-static const struct uvc_format_info uvc_formats[] = {
-	{ V4L2_PIX_FMT_YUYV, uvc_frames_yuyv },
-	{ V4L2_PIX_FMT_MJPEG, uvc_frames_mjpeg },
-};
-
 static void
 uvc_fill_streaming_control(struct uvc_device *dev,
 			   struct uvc_streaming_control *ctrl,
 			   int iformat, int iframe, unsigned int ival)
 {
-	const struct uvc_format_info *format;
-	const struct uvc_frame_info *frame;
-	const unsigned int *interval;
-	unsigned int nframes;
+	const struct uvc_function_config_format *format;
+	const struct uvc_function_config_frame *frame;
+	unsigned int i;
 
 	/*
 	 * Restrict the iformat, iframe and ival to valid values. Negative
@@ -297,26 +266,28 @@ uvc_fill_streaming_control(struct uvc_device *dev,
 	 * being selected.
 	 */
         iformat = clamp((unsigned int)iformat, 1U,
-                        (unsigned int)ARRAY_SIZE(uvc_formats));
-	format = &uvc_formats[iformat-1];
+                        dev->fc->streaming.num_formats);
+	format = &dev->fc->streaming.formats[iformat-1];
 
-	nframes = 0;
-	while (format->frames[nframes].width != 0)
-		++nframes;
-
-	iframe = clamp((unsigned int)iframe, 1U, nframes);
+	iframe = clamp((unsigned int)iframe, 1U, format->num_frames);
 	frame = &format->frames[iframe-1];
 
-	interval = frame->intervals;
-	while (interval[0] < ival && interval[1])
-		++interval;
+	for (i = 0; i < frame->num_intervals; ++i) {
+		if (ival <= frame->intervals[i]) {
+			ival = frame->intervals[i];
+			break;
+		}
+	}
+
+	if (i == frame->num_intervals)
+		ival = frame->intervals[frame->num_intervals-1];
 
 	memset(ctrl, 0, sizeof *ctrl);
 
 	ctrl->bmHint = 1;
 	ctrl->bFormatIndex = iformat;
 	ctrl->bFrameIndex = iframe ;
-	ctrl->dwFrameInterval = *interval;
+	ctrl->dwFrameInterval = ival;
 
 	switch (format->fcc) {
 	case V4L2_PIX_FMT_YUYV:
@@ -474,10 +445,10 @@ uvc_events_process_data(struct uvc_stream *stream,
 				   ctrl->bFrameIndex, ctrl->dwFrameInterval);
 
 	if (dev->control == UVC_VS_COMMIT_CONTROL) {
-		const struct uvc_format_info *format;
-		const struct uvc_frame_info *frame;
+		const struct uvc_function_config_format *format;
+		const struct uvc_function_config_frame *frame;
 
-		format = &uvc_formats[target->bFormatIndex-1];
+		format = &dev->fc->streaming.formats[target->bFormatIndex-1];
 		frame = &format->frames[target->bFrameIndex-1];
 
 		dev->fcc = format->fcc;
