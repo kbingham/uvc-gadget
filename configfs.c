@@ -496,12 +496,7 @@ static int configfs_parse_streaming_frame(const char *path,
 	char *p;
 	int ret = 0;
 
-	/*
-	 * No driver support for bFrameIndex yet.
-	 *
-	 * ret = ret ? : attribute_read_uint(path, "bFrameIndex", &frame->index);
-	 */
-
+	ret = ret ? : attribute_read_uint(path, "bFrameIndex", &frame->index);
 	ret = ret ? : attribute_read_uint(path, "wWidth", &frame->width);
 	ret = ret ? : attribute_read_uint(path, "wHeight", &frame->height);
 	if (ret)
