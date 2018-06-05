@@ -117,6 +117,8 @@ create_uvc() {
 	mkdir functions/$FUNCTION
 
 	create_frame $FUNCTION 640 360
+	create_frame $FUNCTION 1280 720
+	create_frame $FUNCTION 320 180
 
 	mkdir functions/$FUNCTION/streaming/header/h
 	cd functions/$FUNCTION/streaming/header/h
