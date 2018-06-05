@@ -85,6 +85,27 @@ delete_msd() {
 	echo "OK"
 }
 
+create_frame() {
+	# Example usage:
+	# create_frame <function name> <width> <height>
+
+	FUNCTION=$1
+	WIDTH=$2
+	HEIGHT=$3
+
+	wdir=functions/$FUNCTION/streaming/uncompressed/u/${HEIGHT}p
+
+	mkdir -p $wdir
+	echo $WIDTH > $wdir/wWidth
+	echo $HEIGHT > $wdir/wHeight
+	echo $(( $WIDTH * $HEIGHT * 2 )) > $wdir/dwMaxVideoFrameBufferSize
+	cat <<EOF > $wdir/dwFrameInterval
+666666
+100000
+5000000
+EOF
+}
+
 create_uvc() {
 	# Example usage:
 	#	create_uvc <target config> <function name>
@@ -94,12 +115,9 @@ create_uvc() {
 
 	echo "	Creating UVC gadget functionality : $FUNCTION"
 	mkdir functions/$FUNCTION
-	mkdir -p functions/$FUNCTION/streaming/uncompressed/u/360p
-	cat <<EOF > functions/$FUNCTION/streaming/uncompressed/u/360p/dwFrameInterval
-666666
-1000000
-5000000
-EOF
+
+	create_frame $FUNCTION 640 360
+
 	mkdir functions/$FUNCTION/streaming/header/h
 	cd functions/$FUNCTION/streaming/header/h
 	ln -s ../../uncompressed/u
@@ -134,7 +152,7 @@ delete_uvc() {
 	rm functions/$FUNCTION/control/class/*/h
 	rm functions/$FUNCTION/streaming/class/*/h
 	rm functions/$FUNCTION/streaming/header/h/u
-	rmdir functions/$FUNCTION/streaming/uncompressed/u/360p
+	rmdir functions/$FUNCTION/streaming/uncompressed/u/*/
 	rmdir functions/$FUNCTION/streaming/uncompressed/u
 	rmdir functions/$FUNCTION/streaming/header/h
 	rmdir functions/$FUNCTION/control/header/h
