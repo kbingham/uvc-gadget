@@ -10,7 +10,9 @@ LDFLAGS		:= -g
 OBJS		:= \
 			configfs.o \
 			events.o \
-			uvc-gadget.o \
+			main.o \
+			stream.o \
+			uvc.o \
 			v4l2.o
 
 all: uvc-gadget
