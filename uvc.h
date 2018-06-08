@@ -22,13 +22,16 @@
 
 #include <linux/usb/video.h>
 
+struct events;
 struct v4l2_device;
 struct uvc_function_config;
+struct uvc_stream;
 
 struct uvc_device
 {
 	struct v4l2_device *vdev;
 
+	struct uvc_stream *stream;
 	struct uvc_function_config *fc;
 
 	struct uvc_streaming_control probe;
@@ -42,9 +45,8 @@ struct uvc_device
 	unsigned int maxsize;
 };
 
-void uvc_events_process(void *d);
-struct uvc_device *uvc_open(const char *devname);
+struct uvc_device *uvc_open(const char *devname, struct uvc_stream *stream);
 void uvc_close(struct uvc_device *dev);
-void uvc_events_init(struct uvc_device *dev);
+void uvc_events_init(struct uvc_device *dev, struct events *events);
 
 #endif /* __UVC_H__ */

@@ -178,11 +178,6 @@ int uvc_stream_set_format(struct uvc_stream *stream)
 	return v4l2_set_format(cap, &fmt);
 }
 
-static int uvc_video_init(struct uvc_device *dev __attribute__((__unused__)))
-{
-	return 0;
-}
-
 /* ---------------------------------------------------------------------------
  * Stream handling
  */
@@ -202,7 +197,7 @@ struct uvc_stream *uvc_stream_new(const char *uvc_device,
 	if (stream->cap == NULL)
 		goto error;
 
-	stream->uvc = uvc_open(uvc_device);
+	stream->uvc = uvc_open(uvc_device, stream);
 	if (stream->uvc == NULL)
 		goto error;
 
@@ -236,15 +231,11 @@ void uvc_stream_init_uvc(struct uvc_stream *stream,
 	stream->uvc->maxsize = 0;
 	stream->uvc->fc = fc;
 
-	uvc_events_init(stream->uvc);
-	uvc_video_init(stream->uvc);
+	uvc_events_init(stream->uvc, stream->events);
 }
 
 void uvc_stream_set_event_handler(struct uvc_stream *stream,
 				  struct events *events)
 {
 	stream->events = events;
-
-	events_watch_fd(stream->events, stream->uvc->vdev->fd, EVENT_EXCEPTION,
-			uvc_events_process, stream);
 }

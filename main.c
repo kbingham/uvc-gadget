@@ -115,8 +115,8 @@ int main(int argc, char *argv[])
 		goto done;
 	}
 
-	uvc_stream_init_uvc(stream, fc);
 	uvc_stream_set_event_handler(stream, &events);
+	uvc_stream_init_uvc(stream, fc);
 
 	/* Main capture loop */
 	events_loop(&events);

@@ -65,6 +65,12 @@ struct uvc_stream *uvc_stream_new(const char *uvc_device,
  * contains all the parameters of the UVC function that will be handled by the
  * UVC stream. It can be parsed from the UVC function ConfigFS directory using
  * configfs_parse_uvc_function().
+ *
+ * uvc_stream_init_uvc() also registers UVC event notifiers for the stream. The
+ * caller must have called the uvc_stream_set_event_handler() function first,
+ * and ensure that the event handler is immediately usable. If the event loop is
+ * already running, all initialization steps required to handle events must be
+ * fully performed before calling this function.
  */
 void uvc_stream_init_uvc(struct uvc_stream *stream,
 			 struct uvc_function_config *fc);
@@ -75,11 +81,7 @@ void uvc_stream_init_uvc(struct uvc_stream *stream,
  * @events: the event handler
  *
  * This function sets the event handler that the stream can use to be notified
- * of file descriptor events. Event notifiers can be registered by this
- * function, the caller must ensure that the event handler is immediately
- * usable. If the event loop is already running, all initialization steps
- * required to handle events must be fully performed before calling this
- * function.
+ * of file descriptor events.
  */
 void uvc_stream_set_event_handler(struct uvc_stream *stream,
 				  struct events *events);

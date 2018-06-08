@@ -27,12 +27,13 @@
 #include <sys/ioctl.h>
 
 #include "configfs.h"
+#include "events.h"
 #include "stream.h"
 #include "tools.h"
 #include "uvc.h"
 #include "v4l2.h"
 
-struct uvc_device *uvc_open(const char *devname)
+struct uvc_device *uvc_open(const char *devname, struct uvc_stream *stream)
 {
 	struct uvc_device *dev;
 
@@ -41,6 +42,7 @@ struct uvc_device *uvc_open(const char *devname)
 		return NULL;
 
 	memset(dev, 0, sizeof *dev);
+	dev->stream = stream;
 
 	dev->vdev = v4l2_open(devname);
 	if (dev->vdev == NULL) {
@@ -229,10 +231,9 @@ uvc_events_process_setup(struct uvc_device *dev,
 }
 
 static void
-uvc_events_process_data(struct uvc_stream *stream,
+uvc_events_process_data(struct uvc_device *dev,
 			const struct uvc_request_data *data)
 {
-	struct uvc_device *dev = stream->uvc;
 	const struct uvc_streaming_control *ctrl =
 		(const struct uvc_streaming_control *)&data->data;
 	struct uvc_streaming_control *target;
@@ -267,14 +268,13 @@ uvc_events_process_data(struct uvc_stream *stream,
 		dev->width = frame->width;
 		dev->height = frame->height;
 
-		uvc_stream_set_format(stream);
+		uvc_stream_set_format(dev->stream);
 	}
 }
 
-void uvc_events_process(void *d)
+static void uvc_events_process(void *d)
 {
-	struct uvc_stream *stream = d;
-	struct uvc_device *dev = stream->uvc;
+	struct uvc_device *dev = d;
 	struct v4l2_event v4l2_event;
 	const struct uvc_event *uvc_event = (void *)&v4l2_event.u.data;
 	struct uvc_request_data resp;
@@ -300,15 +300,15 @@ void uvc_events_process(void *d)
 		break;
 
 	case UVC_EVENT_DATA:
-		uvc_events_process_data(stream, &uvc_event->data);
+		uvc_events_process_data(dev, &uvc_event->data);
 		return;
 
 	case UVC_EVENT_STREAMON:
-		uvc_stream_enable(stream, 1);
+		uvc_stream_enable(dev->stream, 1);
 		return;
 
 	case UVC_EVENT_STREAMOFF:
-		uvc_stream_enable(stream, 0);
+		uvc_stream_enable(dev->stream, 0);
 		return;
 	}
 
@@ -320,7 +320,7 @@ void uvc_events_process(void *d)
 	}
 }
 
-void uvc_events_init(struct uvc_device *dev)
+void uvc_events_init(struct uvc_device *dev, struct events *events)
 {
 	struct v4l2_event_subscription sub;
 
@@ -337,4 +337,7 @@ void uvc_events_init(struct uvc_device *dev)
 	ioctl(dev->vdev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 	sub.type = UVC_EVENT_STREAMOFF;
 	ioctl(dev->vdev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
+
+	events_watch_fd(events, dev->vdev->fd, EVENT_EXCEPTION,
+			uvc_events_process, dev);
 }
