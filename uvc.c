@@ -357,6 +357,8 @@ void uvc_events_init(struct uvc_device *dev, struct events *events)
 
 void uvc_set_config(struct uvc_device *dev, struct uvc_function_config *fc)
 {
+	/* FIXME: The maximum size should be specified per format and frame. */
+	dev->maxsize = 0;
 	dev->fc = fc;
 }
 
