@@ -260,6 +260,7 @@ uvc_events_process_data(struct uvc_device *dev,
 	if (dev->control == UVC_VS_COMMIT_CONTROL) {
 		const struct uvc_function_config_format *format;
 		const struct uvc_function_config_frame *frame;
+		struct v4l2_pix_format pixfmt;
 
 		format = &dev->fc->streaming.formats[target->bFormatIndex-1];
 		frame = &format->frames[target->bFrameIndex-1];
@@ -268,7 +269,15 @@ uvc_events_process_data(struct uvc_device *dev,
 		dev->width = frame->width;
 		dev->height = frame->height;
 
-		uvc_stream_set_format(dev->stream);
+		memset(&pixfmt, 0, sizeof pixfmt);
+		pixfmt.width = frame->width;
+		pixfmt.height = frame->height;
+		pixfmt.pixelformat = format->fcc;
+		pixfmt.field = V4L2_FIELD_NONE;
+		if (format->fcc == V4L2_PIX_FMT_MJPEG)
+			pixfmt.sizeimage = dev->maxsize * 1.5;
+
+		uvc_stream_set_format(dev->stream, &pixfmt);
 	}
 }
 
@@ -320,6 +329,10 @@ static void uvc_events_process(void *d)
 	}
 }
 
+/* ---------------------------------------------------------------------------
+ * Initialization and setup
+ */
+
 void uvc_events_init(struct uvc_device *dev, struct events *events)
 {
 	struct v4l2_event_subscription sub;
@@ -345,4 +358,9 @@ void uvc_events_init(struct uvc_device *dev, struct events *events)
 void uvc_set_config(struct uvc_device *dev, struct uvc_function_config *fc)
 {
 	dev->fc = fc;
+}
+
+int uvc_set_format(struct uvc_device *dev, struct v4l2_pix_format *format)
+{
+	return v4l2_set_format(dev->vdev, format);
 }

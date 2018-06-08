@@ -167,29 +167,20 @@ void uvc_stream_enable(struct uvc_stream *stream, int enable)
 	}
 }
 
-int uvc_stream_set_format(struct uvc_stream *stream)
+int uvc_stream_set_format(struct uvc_stream *stream,
+			  const struct v4l2_pix_format *format)
 {
-	struct v4l2_device *cap = stream->cap;
-	struct uvc_device *dev = stream->uvc;
-	struct v4l2_pix_format fmt;
+	struct v4l2_pix_format fmt = *format;
 	int ret;
 
 	printf("Setting format to 0x%08x %ux%u\n",
-		dev->fcc, dev->width, dev->height);
+		format->pixelformat, format->width, format->height);
 
-	memset(&fmt, 0, sizeof fmt);
-	fmt.width = dev->width;
-	fmt.height = dev->height;
-	fmt.pixelformat = dev->fcc;
-	fmt.field = V4L2_FIELD_NONE;
-	if (dev->fcc == V4L2_PIX_FMT_MJPEG)
-		fmt.sizeimage = dev->maxsize * 1.5;
-
-	ret = v4l2_set_format(dev->vdev, &fmt);
+	ret = uvc_set_format(stream->uvc, &fmt);
 	if (ret < 0)
 		return ret;
 
-	return v4l2_set_format(cap, &fmt);
+	return v4l2_set_format(stream->cap, &fmt);
 }
 
 /* ---------------------------------------------------------------------------

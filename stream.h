@@ -23,6 +23,7 @@
 struct events;
 struct uvc_function_config;
 struct uvc_stream;
+struct v4l2_pix_format;
 
 /*
  * uvc_stream_new - Create a new UVC stream
@@ -87,13 +88,15 @@ void uvc_stream_delete(struct uvc_stream *stream);
 /*
  * uvc_stream_set_format - Set the active video format for the stream
  * @stream: the UVC stream
+ * @format: the video stream format
  *
  * This function is called from the UVC protocol handler to configure the video
  * format for the @stream. It must not be called directly by applications.
  *
  * Returns 0 on success, or a negative error code on failure.
  */
-int uvc_stream_set_format(struct uvc_stream *stream);
+int uvc_stream_set_format(struct uvc_stream *stream,
+			  const struct v4l2_pix_format *format);
 
 /*
  * uvc_stream_enable - Turn on/off video streaming for the UVC stream
