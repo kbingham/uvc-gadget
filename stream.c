@@ -243,8 +243,8 @@ void uvc_stream_init_uvc(struct uvc_stream *stream,
 	 * FIXME: The maximum size should be specified per format and frame.
 	 */
 	stream->uvc->maxsize = 0;
-	stream->uvc->fc = fc;
 
+	uvc_set_config(stream->uvc, fc);
 	uvc_events_init(stream->uvc, stream->events);
 }
 
