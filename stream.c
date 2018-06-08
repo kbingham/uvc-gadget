@@ -26,6 +26,20 @@
 #include "uvc.h"
 #include "v4l2.h"
 
+/*
+ * struct uvc_stream - Representation of a UVC stream
+ * @cap: V4L2 capture device
+ * @uvc: UVC V4L2 output device
+ * @events: struct events containing event information
+ */
+struct uvc_stream
+{
+	struct v4l2_device *cap;
+	struct uvc_device *uvc;
+
+	struct events *events;
+};
+
 /* ---------------------------------------------------------------------------
  * Video streaming
  */
