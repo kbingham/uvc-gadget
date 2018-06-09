@@ -2,7 +2,7 @@
 /*
  * UVC gadget test application
  *
- * Copyright (C) 2010 Ideas on board SPRL
+ * Copyright (C) 2010-2018 Laurent Pinchart
  *
  * Contact: Laurent Pinchart <laurent.pinchart@ideasonboard.com>
  */
