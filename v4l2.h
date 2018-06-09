@@ -14,36 +14,11 @@
 #ifndef __V4L2_H
 #define __V4L2_H
 
-#include <stdbool.h>
-
 #include <linux/videodev2.h>
-
-#include <sys/time.h>
+#include <stdint.h>
 
 #include "list.h"
-
-/*
- * struct v4l2_video_buffer - Video buffer information
- * @index: Zero-based buffer index, limited to the number of buffers minus one
- * @size: Size of the video memory, in bytes
- * @bytesused: Number of bytes used by video data, smaller or equal to @size
- * @timestamp: Time stamp at which the buffer has been captured
- * @error: True if an error occured while capturing video data for the buffer
- * @allocated: True if memory for the buffer has been allocated
- * @mem: Video data memory
- * @dmabuf: Video data dmabuf handle
- */
-struct v4l2_video_buffer
-{
-	unsigned int index;
-	unsigned int size;
-	unsigned int bytesused;
-	struct timeval timestamp;
-	bool error;
-	bool allocated;
-	void *mem;
-	int dmabuf;
-};
+#include "video-buffers.h"
 
 struct v4l2_device
 {
@@ -57,8 +32,7 @@ struct v4l2_device
 	struct v4l2_pix_format format;
 	struct v4l2_rect crop;
 
-	unsigned int nbufs;
-	struct v4l2_video_buffer *buffers;
+	struct video_buffer_set buffers;
 };
 
 /*
@@ -144,7 +118,7 @@ int v4l2_set_crop(struct v4l2_device *dev, struct v4l2_rect *rect);
  *
  * Request the driver to allocate @nbufs buffers. The driver can modify the
  * number of buffers depending on its needs. The number of allocated buffers
- * will be stored in the @dev::nbufs field.
+ * will be stored in the @dev->buffers.nbufs field.
  *
  * When @memtype is set to V4L2_MEMORY_MMAP the buffers are allocated by the
  * driver. They can then be mapped to userspace by calling v4l2_mmap_buffers().
@@ -166,7 +140,7 @@ int v4l2_alloc_buffers(struct v4l2_device *dev, enum v4l2_memory memtype,
  * objects are freed, and the caller is responsible for freeing the video frames
  * memory if required.
  *
- * When successful this function sets the @dev::nbufs field to zero.
+ * When successful this function sets the @dev->buffers.nbufs field to zero.
  *
  * Return 0 on success or a negative error code on failure.
  */
@@ -194,14 +168,13 @@ int v4l2_export_buffers(struct v4l2_device *dev);
 /*
  * v4l2_import_buffers - Import buffer backing store as dmabuf objects
  * @dev: Device instance
- * @nbufs: Number of buffers in the @buffers array
  * @buffers: Buffers to be imported
  *
  * Import the dmabuf objects from @buffers as backing store for the device
  * buffers previously allocated by v4l2_alloc_buffers().
  *
  * The dmabuf file handles are duplicated and stored in the dmabuf field of the
- * @dev::buffers array. The handles from the @buffers array can thus be closed
+ * @dev::buffers array. The handles from the @buffers set can thus be closed
  * independently without impacting usage of the imported dmabuf objects. The
  * duplicated file handles will be automatically closed when the buffers are
  * freed with v4l2_free_buffers().
@@ -209,12 +182,12 @@ int v4l2_export_buffers(struct v4l2_device *dev);
  * This function can only be called when buffers have been allocated with the
  * memory type set to V4L2_MEMORY_DMABUF. If the memory type is different, if no
  * buffers have been allocated, or if the number of allocated buffers is larger
- * than @nbufs, it will return -EINVAL.
+ * than @buffers->nbufs, it will return -EINVAL.
  *
  * Return 0 on success or a negative error code on failure.
  */
-int v4l2_import_buffers(struct v4l2_device *dev, unsigned int nbufs,
-			const struct v4l2_video_buffer *buffers);
+int v4l2_import_buffers(struct v4l2_device *dev,
+			const struct video_buffer_set *buffers);
 
 /*
  * v4l2_mmap_buffers - Map buffers to application memory space
@@ -263,7 +236,7 @@ int v4l2_mmap_buffers(struct v4l2_device *dev);
  *
  * Return 0 on success or a negative error code on failure.
  */
-int v4l2_queue_buffer(struct v4l2_device *dev, struct v4l2_video_buffer *buffer);
+int v4l2_queue_buffer(struct v4l2_device *dev, struct video_buffer *buffer);
 
 /*
  * v4l2_dequeue_buffer - Dequeue the next buffer
@@ -287,7 +260,7 @@ int v4l2_queue_buffer(struct v4l2_device *dev, struct v4l2_video_buffer *buffer)
  * results in @buffer:error being set is not considered as a failure condition
  * for the purpose of the return value.
  */
-int v4l2_dequeue_buffer(struct v4l2_device *dev, struct v4l2_video_buffer *buffer);
+int v4l2_dequeue_buffer(struct v4l2_device *dev, struct video_buffer *buffer);
 
 /*
  * v4l2_stream_on - Start video streaming

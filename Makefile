@@ -13,7 +13,8 @@ OBJS		:= \
 			main.o \
 			stream.o \
 			uvc.o \
-			v4l2.o
+			v4l2.o \
+			video-buffers.o
 
 all: uvc-gadget
 

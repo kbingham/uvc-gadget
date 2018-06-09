@@ -47,7 +47,7 @@ struct uvc_stream
 static void capture_video_process(void *d)
 {
 	struct uvc_stream *stream = d;
-	struct v4l2_video_buffer buf;
+	struct video_buffer buf;
 	int ret;
 
 	ret = v4l2_dequeue_buffer(stream->cap, &buf);
@@ -60,7 +60,7 @@ static void capture_video_process(void *d)
 static void uvc_video_process(void *d)
 {
 	struct uvc_stream *stream = d;
-	struct v4l2_video_buffer buf;
+	struct video_buffer buf;
 	int ret;
 
 	ret = v4l2_dequeue_buffer(stream->uvc->vdev, &buf);
@@ -92,7 +92,7 @@ static int uvc_video_enable(struct uvc_stream *stream, int enable)
 		return ret;
 	}
 
-	ret = v4l2_import_buffers(dev->vdev, dev->vdev->nbufs, cap->buffers);
+	ret = v4l2_import_buffers(dev->vdev, &cap->buffers);
 	if (ret < 0) {
 		printf("Failed to import buffers: %s (%d)\n", strerror(-ret), -ret);
 		goto error;
@@ -137,8 +137,8 @@ static int capture_video_stream(struct uvc_stream *stream, int enable)
 		goto error;
 	}
 
-	for (i = 0; i < cap->nbufs; ++i) {
-		struct v4l2_video_buffer *buf = &cap->buffers[i];
+	for (i = 0; i < cap->buffers.nbufs; ++i) {
+		struct video_buffer *buf = &cap->buffers.buffers[i];
 
 		ret = v4l2_queue_buffer(cap, buf);
 		if (ret < 0)

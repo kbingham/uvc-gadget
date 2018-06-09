@@ -30,6 +30,7 @@
 #include "list.h"
 #include "tools.h"
 #include "v4l2.h"
+#include "video-buffers.h"
 
 #ifndef V4L2_BUF_FLAG_ERROR
 #define V4L2_BUF_FLAG_ERROR	0x0040
@@ -510,7 +511,7 @@ int v4l2_alloc_buffers(struct v4l2_device *dev, enum v4l2_memory memtype,
 	unsigned int i;
 	int ret;
 
-	if (dev->nbufs != 0)
+	if (dev->buffers.nbufs != 0)
 		return -EBUSY;
 
 	if (memtype != V4L2_MEMORY_MMAP && memtype != V4L2_MEMORY_DMABUF)
@@ -541,19 +542,17 @@ int v4l2_alloc_buffers(struct v4l2_device *dev, enum v4l2_memory memtype,
 
 	/* Allocate the buffer objects. */
 	dev->memtype = memtype;
-	dev->nbufs = rb.count;
+	dev->buffers.nbufs = rb.count;
 
-	dev->buffers = malloc(sizeof *dev->buffers * nbufs);
-	if (dev->buffers == NULL) {
+	dev->buffers.buffers = calloc(nbufs, sizeof *dev->buffers.buffers);
+	if (dev->buffers.buffers == NULL) {
 		ret = -ENOMEM;
 		goto done;
 	}
 
-	memset(dev->buffers, 0, sizeof *dev->buffers * nbufs);
-
-	for (i = 0; i < dev->nbufs; ++i) {
-		dev->buffers[i].index = i;
-		dev->buffers[i].dmabuf = -1;
+	for (i = 0; i < dev->buffers.nbufs; ++i) {
+		dev->buffers.buffers[i].index = i;
+		dev->buffers.buffers[i].dmabuf = -1;
 	}
 
 	ret = 0;
@@ -571,11 +570,11 @@ int v4l2_free_buffers(struct v4l2_device *dev)
 	unsigned int i;
 	int ret;
 
-	if (dev->nbufs == 0)
+	if (dev->buffers.nbufs == 0)
 		return 0;
 
-	for (i = 0; i < dev->nbufs; ++i) {
-		struct v4l2_video_buffer *buffer = &dev->buffers[i];
+	for (i = 0; i < dev->buffers.nbufs; ++i) {
+		struct video_buffer *buffer = &dev->buffers.buffers[i];
 
 		if (buffer->mem) {
 			ret = munmap(buffer->mem, buffer->size);
@@ -608,9 +607,9 @@ int v4l2_free_buffers(struct v4l2_device *dev)
 		return -errno;
 	}
 
-	free(dev->buffers);
-	dev->buffers = NULL;
-	dev->nbufs = 0;
+	free(dev->buffers.buffers);
+	dev->buffers.buffers = NULL;
+	dev->buffers.nbufs = 0;
 
 	return 0;
 }
@@ -620,13 +619,13 @@ int v4l2_export_buffers(struct v4l2_device *dev)
 	unsigned int i;
 	int ret;
 
-	if (dev->nbufs == 0)
+	if (dev->buffers.nbufs == 0)
 		return -EINVAL;
 
 	if (dev->memtype != V4L2_MEMORY_MMAP)
 		return -EINVAL;
 
-	for (i = 0; i < dev->nbufs; ++i) {
+	for (i = 0; i < dev->buffers.nbufs; ++i) {
 		struct v4l2_exportbuffer expbuf = {
 			.type = dev->type,
 			.index = i,
@@ -650,30 +649,30 @@ int v4l2_export_buffers(struct v4l2_device *dev)
 			return -errno;
 		}
 
-		dev->buffers[i].size = buf.length;
-		dev->buffers[i].dmabuf = expbuf.fd;
+		dev->buffers.buffers[i].size = buf.length;
+		dev->buffers.buffers[i].dmabuf = expbuf.fd;
 
 		printf("%s: buffer %u exported with fd %u.\n",
-		       dev->name, i, dev->buffers[i].dmabuf);
+		       dev->name, i, dev->buffers.buffers[i].dmabuf);
 	}
 
 	return 0;
 }
 
-int v4l2_import_buffers(struct v4l2_device *dev, unsigned int nbufs,
-			const struct v4l2_video_buffer *buffers)
+int v4l2_import_buffers(struct v4l2_device *dev,
+			const struct video_buffer_set *buffers)
 {
 	unsigned int i;
 	int ret;
 
-	if (dev->nbufs == 0 || dev->nbufs > nbufs)
+	if (dev->buffers.nbufs == 0 || dev->buffers.nbufs > buffers->nbufs)
 		return -EINVAL;
 
 	if (dev->memtype != V4L2_MEMORY_DMABUF)
 		return -EINVAL;
 
-	for (i = 0; i < dev->nbufs; ++i) {
-		const struct v4l2_video_buffer *buffer = &buffers[i];
+	for (i = 0; i < dev->buffers.nbufs; ++i) {
+		const struct video_buffer *buffer = &buffers->buffers[i];
 		struct v4l2_buffer buf = {
 			.index = i,
 			.type = dev->type,
@@ -703,8 +702,8 @@ int v4l2_import_buffers(struct v4l2_device *dev, unsigned int nbufs,
 
 		printf("%s: buffer %u valid.\n", dev->name, i);
 
-		dev->buffers[i].dmabuf = fd;
-		dev->buffers[i].size = buffer->size;
+		dev->buffers.buffers[i].dmabuf = fd;
+		dev->buffers.buffers[i].size = buffer->size;
 	}
 
 	return 0;
@@ -718,8 +717,8 @@ int v4l2_mmap_buffers(struct v4l2_device *dev)
 	if (dev->memtype != V4L2_MEMORY_MMAP)
 		return -EINVAL;
 
-	for (i = 0; i < dev->nbufs; ++i) {
-		struct v4l2_video_buffer *buffer = &dev->buffers[i];
+	for (i = 0; i < dev->buffers.nbufs; ++i) {
+		struct video_buffer *buffer = &dev->buffers.buffers[i];
 		struct v4l2_buffer buf = {
 			.index = i,
 			.type = dev->type,
@@ -752,7 +751,7 @@ int v4l2_mmap_buffers(struct v4l2_device *dev)
 	return 0;
 }
 
-int v4l2_dequeue_buffer(struct v4l2_device *dev, struct v4l2_video_buffer *buffer)
+int v4l2_dequeue_buffer(struct v4l2_device *dev, struct video_buffer *buffer)
 {
 	struct v4l2_buffer buf;
 	int ret;
@@ -764,11 +763,11 @@ int v4l2_dequeue_buffer(struct v4l2_device *dev, struct v4l2_video_buffer *buffe
 	ret = ioctl(dev->fd, VIDIOC_DQBUF, &buf);
 	if (ret < 0) {
 		printf("%s: unable to dequeue buffer index %u/%u (%d)\n",
-		       dev->name, buf.index, dev->nbufs, errno);
+		       dev->name, buf.index, dev->buffers.nbufs, errno);
 		return -errno;
 	}
 
-	*buffer = dev->buffers[buf.index];
+	buffer->index = buf.index;
 	buffer->bytesused = buf.bytesused;
 	buffer->timestamp = buf.timestamp;
 	buffer->error = !!(buf.flags & V4L2_BUF_FLAG_ERROR);
@@ -776,12 +775,12 @@ int v4l2_dequeue_buffer(struct v4l2_device *dev, struct v4l2_video_buffer *buffe
 	return 0;
 }
 
-int v4l2_queue_buffer(struct v4l2_device *dev, struct v4l2_video_buffer *buffer)
+int v4l2_queue_buffer(struct v4l2_device *dev, struct video_buffer *buffer)
 {
 	struct v4l2_buffer buf;
 	int ret;
 
-	if (buffer->index >= dev->nbufs)
+	if (buffer->index >= dev->buffers.nbufs)
 		return -EINVAL;
 
 	memset(&buf, 0, sizeof buf);
@@ -790,7 +789,7 @@ int v4l2_queue_buffer(struct v4l2_device *dev, struct v4l2_video_buffer *buffer)
 	buf.memory = dev->memtype;
 
 	if (dev->memtype == V4L2_MEMORY_DMABUF)
-		buf.m.fd = (unsigned long)dev->buffers[buffer->index].dmabuf;
+		buf.m.fd = (unsigned long)dev->buffers.buffers[buffer->index].dmabuf;
 
 	if (dev->type == V4L2_BUF_TYPE_VIDEO_OUTPUT)
 		buf.bytesused = buffer->bytesused;
@@ -798,7 +797,7 @@ int v4l2_queue_buffer(struct v4l2_device *dev, struct v4l2_video_buffer *buffer)
 	ret = ioctl(dev->fd, VIDIOC_QBUF, &buf);
 	if (ret < 0) {
 		printf("%s: unable to queue buffer index %u/%u (%d)\n",
-		       dev->name, buf.index, dev->nbufs, errno);
+		       dev->name, buf.index, dev->buffers.nbufs, errno);
 		return -errno;
 	}
 
