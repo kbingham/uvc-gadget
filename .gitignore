@@ -1,2 +1,7 @@
+*.a
 *.o
+CMakeCache.txt
+CMakeFiles
+Makefile
+cmake_install.cmake
 uvc-gadget
