@@ -1,5 +1,5 @@
 /*
- * UVC gadget test application
+ * UVC stream handling
  *
  * Copyright (C) 2010 Ideas on board SPRL <laurent.pinchart@ideasonboard.com>
  *
