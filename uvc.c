@@ -33,6 +33,24 @@
 #include "uvc.h"
 #include "v4l2.h"
 
+struct uvc_device
+{
+	struct v4l2_device *vdev;
+
+	struct uvc_stream *stream;
+	struct uvc_function_config *fc;
+
+	struct uvc_streaming_control probe;
+	struct uvc_streaming_control commit;
+
+	int control;
+
+	unsigned int fcc;
+	unsigned int width;
+	unsigned int height;
+	unsigned int maxsize;
+};
+
 struct uvc_device *uvc_open(const char *devname, struct uvc_stream *stream)
 {
 	struct uvc_device *dev;
@@ -365,4 +383,13 @@ void uvc_set_config(struct uvc_device *dev, struct uvc_function_config *fc)
 int uvc_set_format(struct uvc_device *dev, struct v4l2_pix_format *format)
 {
 	return v4l2_set_format(dev->vdev, format);
+}
+
+struct v4l2_device *uvc_v4l2_device(struct uvc_device *dev)
+{
+	/*
+	 * TODO: The V4L2 device shouldn't be exposed. We should replace this
+	 * with an abstract video sink class when one will be avaiilable.
+	 */
+	return dev->vdev;
 }

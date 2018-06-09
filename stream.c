@@ -50,17 +50,19 @@ static void uvc_stream_source_process(void *d, struct video_source *src,
 				      struct video_buffer *buffer)
 {
 	struct uvc_stream *stream = d;
+	struct v4l2_device *sink = uvc_v4l2_device(stream->uvc);
 
-	v4l2_queue_buffer(stream->uvc->vdev, buffer);
+	v4l2_queue_buffer(sink, buffer);
 }
 
 static void uvc_stream_uvc_process(void *d)
 {
 	struct uvc_stream *stream = d;
+	struct v4l2_device *sink = uvc_v4l2_device(stream->uvc);
 	struct video_buffer buf;
 	int ret;
 
-	ret = v4l2_dequeue_buffer(stream->uvc->vdev, &buf);
+	ret = v4l2_dequeue_buffer(sink, &buf);
 	if (ret < 0)
 		return;
 
@@ -69,6 +71,7 @@ static void uvc_stream_uvc_process(void *d)
 
 static int uvc_stream_start(struct uvc_stream *stream)
 {
+	struct v4l2_device *sink = uvc_v4l2_device(stream->uvc);
 	struct video_buffer_set *buffers = NULL;
 	int ret;
 
@@ -90,15 +93,14 @@ static int uvc_stream_start(struct uvc_stream *stream)
 	}
 
 	/* Allocate and import the buffers on the sink. */
-	ret = v4l2_alloc_buffers(stream->uvc->vdev, V4L2_MEMORY_DMABUF,
-				 buffers->nbufs);
+	ret = v4l2_alloc_buffers(sink, V4L2_MEMORY_DMABUF, buffers->nbufs);
 	if (ret < 0) {
 		printf("Failed to allocate sink buffers: %s (%d)\n",
 		       strerror(-ret), -ret);
 		goto error_free_source;
 	}
 
-	ret = v4l2_import_buffers(stream->uvc->vdev, buffers);
+	ret = v4l2_import_buffers(sink, buffers);
 	if (ret < 0) {
 		printf("Failed to import buffers on sink: %s (%d)\n",
 		       strerror(-ret), -ret);
@@ -107,15 +109,15 @@ static int uvc_stream_start(struct uvc_stream *stream)
 
 	/* Start the source and sink. */
 	video_source_stream_on(stream->src);
-	v4l2_stream_on(stream->uvc->vdev);
+	v4l2_stream_on(sink);
 
-	events_watch_fd(stream->events, stream->uvc->vdev->fd, EVENT_WRITE,
+	events_watch_fd(stream->events, sink->fd, EVENT_WRITE,
 			uvc_stream_uvc_process, stream);
 
 	return 0;
 
 error_free_sink:
-	v4l2_free_buffers(stream->uvc->vdev);
+	v4l2_free_buffers(sink);
 error_free_source:
 	video_source_free_buffers(stream->src);
 	if (buffers)
@@ -125,14 +127,16 @@ error_free_source:
 
 static int uvc_stream_stop(struct uvc_stream *stream)
 {
+	struct v4l2_device *sink = uvc_v4l2_device(stream->uvc);
+
 	printf("Stopping video stream.\n");
 
-	events_unwatch_fd(stream->events, stream->uvc->vdev->fd, EVENT_WRITE);
+	events_unwatch_fd(stream->events, sink->fd, EVENT_WRITE);
 
-	v4l2_stream_off(stream->uvc->vdev);
+	v4l2_stream_off(sink);
 	video_source_stream_off(stream->src);
 
-	v4l2_free_buffers(stream->uvc->vdev);
+	v4l2_free_buffers(sink);
 	video_source_free_buffers(stream->src);
 
 	return 0;

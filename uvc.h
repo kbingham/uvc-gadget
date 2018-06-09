@@ -20,35 +20,17 @@
 #ifndef __UVC_H__
 #define __UVC_H__
 
-#include <linux/usb/video.h>
-
 struct events;
 struct v4l2_device;
+struct uvc_device;
 struct uvc_function_config;
 struct uvc_stream;
-
-struct uvc_device
-{
-	struct v4l2_device *vdev;
-
-	struct uvc_stream *stream;
-	struct uvc_function_config *fc;
-
-	struct uvc_streaming_control probe;
-	struct uvc_streaming_control commit;
-
-	int control;
-
-	unsigned int fcc;
-	unsigned int width;
-	unsigned int height;
-	unsigned int maxsize;
-};
 
 struct uvc_device *uvc_open(const char *devname, struct uvc_stream *stream);
 void uvc_close(struct uvc_device *dev);
 void uvc_events_init(struct uvc_device *dev, struct events *events);
 void uvc_set_config(struct uvc_device *dev, struct uvc_function_config *fc);
 int uvc_set_format(struct uvc_device *dev, struct v4l2_pix_format *format);
+struct v4l2_device *uvc_v4l2_device(struct uvc_device *dev);
 
 #endif /* __UVC_H__ */
