@@ -24,22 +24,21 @@ struct events;
 struct uvc_function_config;
 struct uvc_stream;
 struct v4l2_pix_format;
+struct video_source;
 
 /*
  * uvc_stream_new - Create a new UVC stream
  * @uvc_device: Filename of UVC device node
- * @cap_device: Filename of V4L2 capture device node
  *
- * Create a new UVC stream with V4L2 @uvc_device as the output and @cap_device
- * as input.
+ * Create a new UVC stream to handle the UVC function corresponding to the video
+ * device node @uvc_device.
  *
  * Streams allocated with this function can be deleted with uvc_stream_delete().
  *
  * On success, returns a pointer to newly allocated and populated struct uvc_stream.
  * On failure, returns NULL.
  */
-struct uvc_stream *uvc_stream_new(const char *uvc_device,
-				  const char *cap_device);
+struct uvc_stream *uvc_stream_new(const char *uvc_device);
 
 /*
  * uvc_stream_init_uvc - Initialize a UVC stream
@@ -71,6 +70,9 @@ void uvc_stream_init_uvc(struct uvc_stream *stream,
  */
 void uvc_stream_set_event_handler(struct uvc_stream *stream,
 				  struct events *events);
+
+void uvc_stream_set_video_source(struct uvc_stream *stream,
+				 struct video_source *src);
 
 /*
  * uvc_stream_delete - Delete a UVC stream

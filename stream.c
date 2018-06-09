@@ -25,16 +25,18 @@
 #include "stream.h"
 #include "uvc.h"
 #include "v4l2.h"
+#include "video-buffers.h"
+#include "video-source.h"
 
 /*
  * struct uvc_stream - Representation of a UVC stream
- * @cap: V4L2 capture device
+ * @src: video source
  * @uvc: UVC V4L2 output device
  * @events: struct events containing event information
  */
 struct uvc_stream
 {
-	struct v4l2_device *cap;
+	struct video_source *src;
 	struct uvc_device *uvc;
 
 	struct events *events;
@@ -44,20 +46,15 @@ struct uvc_stream
  * Video streaming
  */
 
-static void capture_video_process(void *d)
+static void uvc_stream_source_process(void *d, struct video_source *src,
+				      struct video_buffer *buffer)
 {
 	struct uvc_stream *stream = d;
-	struct video_buffer buf;
-	int ret;
 
-	ret = v4l2_dequeue_buffer(stream->cap, &buf);
-	if (ret < 0)
-		return;
-
-	v4l2_queue_buffer(stream->uvc->vdev, &buf);
+	v4l2_queue_buffer(stream->uvc->vdev, buffer);
 }
 
-static void uvc_video_process(void *d)
+static void uvc_stream_uvc_process(void *d)
 {
 	struct uvc_stream *stream = d;
 	struct video_buffer buf;
@@ -67,104 +64,86 @@ static void uvc_video_process(void *d)
 	if (ret < 0)
 		return;
 
-	v4l2_queue_buffer(stream->cap, &buf);
+	video_source_queue_buffer(stream->src, &buf);
 }
 
-static int uvc_video_enable(struct uvc_stream *stream, int enable)
+static int uvc_stream_start(struct uvc_stream *stream)
 {
-	struct v4l2_device *cap = stream->cap;
-	struct uvc_device *dev = stream->uvc;
+	struct video_buffer_set *buffers = NULL;
 	int ret;
-
-	if (!enable) {
-		printf("Stopping video stream.\n");
-		events_unwatch_fd(stream->events, dev->vdev->fd, EVENT_WRITE);
-		v4l2_stream_off(dev->vdev);
-		v4l2_free_buffers(dev->vdev);
-		return 0;
-	}
 
 	printf("Starting video stream.\n");
 
-	ret = v4l2_alloc_buffers(dev->vdev, V4L2_MEMORY_DMABUF, 4);
+	/* Allocate and export the buffers on the source. */
+	ret = video_source_alloc_buffers(stream->src, 4);
 	if (ret < 0) {
-		printf("Failed to allocate buffers: %s (%d)\n", strerror(-ret), -ret);
+		printf("Failed to allocate source buffers: %s (%d)\n",
+		       strerror(-ret), -ret);
 		return ret;
 	}
 
-	ret = v4l2_import_buffers(dev->vdev, &cap->buffers);
+	ret = video_source_export_buffers(stream->src, &buffers);
 	if (ret < 0) {
-		printf("Failed to import buffers: %s (%d)\n", strerror(-ret), -ret);
-		goto error;
+		printf("Failed to export buffers on source: %s (%d)\n",
+		       strerror(-ret), -ret);
+		goto error_free_source;
 	}
 
-	v4l2_stream_on(dev->vdev);
-	events_watch_fd(stream->events, dev->vdev->fd, EVENT_WRITE,
-			uvc_video_process, stream);
+	/* Allocate and import the buffers on the sink. */
+	ret = v4l2_alloc_buffers(stream->uvc->vdev, V4L2_MEMORY_DMABUF,
+				 buffers->nbufs);
+	if (ret < 0) {
+		printf("Failed to allocate sink buffers: %s (%d)\n",
+		       strerror(-ret), -ret);
+		goto error_free_source;
+	}
+
+	ret = v4l2_import_buffers(stream->uvc->vdev, buffers);
+	if (ret < 0) {
+		printf("Failed to import buffers on sink: %s (%d)\n",
+		       strerror(-ret), -ret);
+		goto error_free_sink;
+	}
+
+	/* Start the source and sink. */
+	video_source_stream_on(stream->src);
+	v4l2_stream_on(stream->uvc->vdev);
+
+	events_watch_fd(stream->events, stream->uvc->vdev->fd, EVENT_WRITE,
+			uvc_stream_uvc_process, stream);
 
 	return 0;
 
-error:
-	v4l2_free_buffers(dev->vdev);
+error_free_sink:
+	v4l2_free_buffers(stream->uvc->vdev);
+error_free_source:
+	video_source_free_buffers(stream->src);
+	if (buffers)
+		video_buffer_set_delete(buffers);
 	return ret;
 }
 
-static int capture_video_stream(struct uvc_stream *stream, int enable)
+static int uvc_stream_stop(struct uvc_stream *stream)
 {
-	struct v4l2_device *cap = stream->cap;
-	unsigned int i;
-	int ret;
+	printf("Stopping video stream.\n");
 
-	if (!enable) {
-		printf("Stopping video capture stream.\n");
-		events_unwatch_fd(stream->events, cap->fd, EVENT_READ);
-		v4l2_stream_off(cap);
-		v4l2_free_buffers(cap);
-		return 0;
-	}
+	events_unwatch_fd(stream->events, stream->uvc->vdev->fd, EVENT_WRITE);
 
-	printf("Starting video capture stream.\n");
+	v4l2_stream_off(stream->uvc->vdev);
+	video_source_stream_off(stream->src);
 
-	ret = v4l2_alloc_buffers(cap, V4L2_MEMORY_MMAP, 4);
-	if (ret < 0) {
-		printf("Failed to allocate capture buffers.\n");
-		return ret;
-	}
-
-	ret = v4l2_export_buffers(cap);
-	if (ret < 0) {
-		printf("Failed to export buffers.\n");
-		goto error;
-	}
-
-	for (i = 0; i < cap->buffers.nbufs; ++i) {
-		struct video_buffer *buf = &cap->buffers.buffers[i];
-
-		ret = v4l2_queue_buffer(cap, buf);
-		if (ret < 0)
-			goto error;
-	}
-
-	v4l2_stream_on(cap);
-	events_watch_fd(stream->events, cap->fd, EVENT_READ,
-			capture_video_process, stream);
+	v4l2_free_buffers(stream->uvc->vdev);
+	video_source_free_buffers(stream->src);
 
 	return 0;
-
-error:
-	v4l2_free_buffers(cap);
-	return ret;
 }
 
 void uvc_stream_enable(struct uvc_stream *stream, int enable)
 {
-	if (enable) {
-		capture_video_stream(stream, 1);
-		uvc_video_enable(stream, 1);
-	} else {
-		uvc_video_enable(stream, 0);
-		capture_video_stream(stream, 0);
-	}
+	if (enable)
+		uvc_stream_start(stream);
+	else
+		uvc_stream_stop(stream);
 }
 
 int uvc_stream_set_format(struct uvc_stream *stream,
@@ -180,15 +159,14 @@ int uvc_stream_set_format(struct uvc_stream *stream,
 	if (ret < 0)
 		return ret;
 
-	return v4l2_set_format(stream->cap, &fmt);
+	return video_source_set_format(stream->src, &fmt);
 }
 
 /* ---------------------------------------------------------------------------
  * Stream handling
  */
 
-struct uvc_stream *uvc_stream_new(const char *uvc_device,
-				  const char *cap_device)
+struct uvc_stream *uvc_stream_new(const char *uvc_device)
 {
 	struct uvc_stream *stream;
 
@@ -198,10 +176,6 @@ struct uvc_stream *uvc_stream_new(const char *uvc_device,
 
 	memset(stream, 0, sizeof(*stream));
 
-	stream->cap = v4l2_open(cap_device);
-	if (stream->cap == NULL)
-		goto error;
-
 	stream->uvc = uvc_open(uvc_device, stream);
 	if (stream->uvc == NULL)
 		goto error;
@@ -209,9 +183,6 @@ struct uvc_stream *uvc_stream_new(const char *uvc_device,
 	return stream;
 
 error:
-	if (stream->cap)
-		v4l2_close(stream->cap);
-
 	free(stream);
 	return NULL;
 }
@@ -221,7 +192,6 @@ void uvc_stream_delete(struct uvc_stream *stream)
 	if (stream == NULL)
 		return;
 
-	v4l2_close(stream->cap);
 	uvc_close(stream->uvc);
 
 	free(stream);
@@ -238,4 +208,12 @@ void uvc_stream_set_event_handler(struct uvc_stream *stream,
 				  struct events *events)
 {
 	stream->events = events;
+}
+
+void uvc_stream_set_video_source(struct uvc_stream *stream,
+				 struct video_source *src)
+{
+	stream->src = src;
+
+	video_source_set_buffer_handler(src, uvc_stream_source_process, stream);
 }

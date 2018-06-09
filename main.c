@@ -24,6 +24,7 @@
 #include "configfs.h"
 #include "events.h"
 #include "stream.h"
+#include "v4l2-source.h"
 
 static void usage(const char *argv0)
 {
@@ -56,7 +57,7 @@ static void usage(const char *argv0)
 /* Necessary for and only used by signal handler. */
 static struct events *sigint_events;
 
-static void sigint_handler(int signal __attribute__((__unused__)))
+static void sigint_handler(int signal)
 {
 	/* Stop the main loop when the user presses CTRL-C */
 	events_stop(sigint_events);
@@ -68,6 +69,7 @@ int main(int argc, char *argv[])
 	char *cap_device = "/dev/video1";
 	struct uvc_function_config *fc;
 	struct uvc_stream *stream;
+	struct video_source *src = NULL;
 	struct events events;
 	int ret = 0;
 	int opt;
@@ -108,14 +110,24 @@ int main(int argc, char *argv[])
 	sigint_events = &events;
 	signal(SIGINT, sigint_handler);
 
+	/* Create and initialize a video source. */
+	src = v4l2_video_source_create(cap_device);
+	if (src == NULL) {
+		ret = 1;
+		goto done;
+	}
+
+	v4l2_video_source_init(src, &events);
+
 	/* Create and initialise the stream. */
-	stream = uvc_stream_new(fc->video, cap_device);
+	stream = uvc_stream_new(fc->video);
 	if (stream == NULL) {
 		ret = 1;
 		goto done;
 	}
 
 	uvc_stream_set_event_handler(stream, &events);
+	uvc_stream_set_video_source(stream, src);
 	uvc_stream_init_uvc(stream, fc);
 
 	/* Main capture loop */
@@ -124,6 +136,7 @@ int main(int argc, char *argv[])
 done:
 	/* Cleanup */
 	uvc_stream_delete(stream);
+	video_source_destroy(src);
 	events_cleanup(&events);
 	configfs_free_uvc_function(fc);
 
