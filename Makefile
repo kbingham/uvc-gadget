@@ -14,6 +14,7 @@ OBJS		:= \
 			stream.o \
 			uvc.o \
 			v4l2.o \
+			v4l2-source.o \
 			video-buffers.o \
 			video-source.o
 
