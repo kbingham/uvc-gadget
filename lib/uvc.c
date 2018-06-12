@@ -329,10 +329,10 @@ static void uvc_events_process(void *d)
 		return;
 	}
 
-	ioctl(dev->vdev->fd, UVCIOC_SEND_RESPONSE, &resp);
+	ret = ioctl(dev->vdev->fd, UVCIOC_SEND_RESPONSE, &resp);
 	if (ret < 0) {
-		printf("UVCIOC_S_EVENT failed: %s (%d)\n", strerror(errno),
-			errno);
+		printf("UVCIOC_SEND_RESPONSE failed: %s (%d)\n",
+		       strerror(errno), errno);
 		return;
 	}
 }
