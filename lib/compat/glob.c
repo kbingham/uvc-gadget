@@ -19,6 +19,11 @@
 # include <config.h>
 #endif
 
+#define _GNU_SOURCE
+#define __glibc_unlikely(x)		x
+#define __libc_use_alloca(x)		0
+#define alloca_account(size, avar)	alloca(size)
+
 #include <glob.h>
 
 #include <errno.h>
@@ -93,10 +98,7 @@
 # endif
 # define struct_stat64		struct stat64
 #else /* !_LIBC */
-# include "getlogin_r.h"
-# include "mempcpy.h"
-# include "stat-macros.h"
-# include "strdup.h"
+# include <unistd.h>
 # define __stat64(fname, buf)	stat (fname, buf)
 # define struct_stat64		struct stat
 # define __stat(fname, buf)	stat (fname, buf)
@@ -104,6 +106,8 @@
 # define __readdir		readdir
 # define __readdir64		readdir64
 # define __glob_pattern_p	glob_pattern_p
+# define __getlogin_r(buf, len)	getlogin_r(buf, len)
+# define __strdup(str)		strdup (str)
 #endif /* _LIBC */
 
 #include <fnmatch.h>
@@ -292,9 +296,7 @@ glob (const char *pattern, int flags, int (*errfunc) (const char *, int),
   int malloc_dirname = 0;
   glob_t dirs;
   int retval = 0;
-#ifdef _LIBC
   size_t alloca_used = 0;
-#endif
 
   if (pattern == NULL || pglob == NULL || (flags & ~__GLOB_FLAGS) != 0)
     {
@@ -700,8 +702,11 @@ glob (const char *pattern, int flags, int (*errfunc) (const char *, int),
 #   endif
 		  if (p != NULL)
 		    {
+#   if defined HAVE_GETPWNAM_R || defined _LIBC
 		      if (!malloc_pwtmpbuf)
+#   endif
 			home_dir = p->pw_dir;
+#   if defined HAVE_GETPWNAM_R || defined _LIBC
 		      else
 			{
 			  size_t home_dir_len = strlen (p->pw_dir) + 1;
@@ -723,6 +728,7 @@ glob (const char *pattern, int flags, int (*errfunc) (const char *, int),
 
 			  free (pwtmpbuf);
 			}
+#   endif
 		    }
 		}
 	    }
@@ -931,8 +937,10 @@ glob (const char *pattern, int flags, int (*errfunc) (const char *, int),
 		    dirname = malloc (home_len + rest_len + 1);
 		    if (dirname == NULL)
 		      {
+#  if defined HAVE_GETPWNAM_R || defined _LIBC
 			if (__glibc_unlikely (malloc_pwtmpbuf))
 			  free (pwtmpbuf);
+#  endif
 			retval = GLOB_NOSPACE;
 			goto out;
 		      }
@@ -944,13 +952,17 @@ glob (const char *pattern, int flags, int (*errfunc) (const char *, int),
 		dirlen = home_len + rest_len;
 		dirname_modified = 1;
 
+#  if defined HAVE_GETPWNAM_R || defined _LIBC
 		if (__glibc_unlikely (malloc_pwtmpbuf))
 		  free (pwtmpbuf);
+#  endif
 	      }
 	    else
 	      {
+#  if defined HAVE_GETPWNAM_R || defined _LIBC
 		if (__glibc_unlikely (malloc_pwtmpbuf))
 		  free (pwtmpbuf);
+#  endif
 
 		if (flags & GLOB_TILDE_CHECK)
 		  /* We have to regard it as an error if we cannot find the
