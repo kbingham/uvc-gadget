@@ -32,8 +32,17 @@
 static char *path_join(const char *dirname, const char *name)
 {
 	char *path;
+	int ret;
 
-	asprintf(&path, "%s/%s", dirname, name);
+	ret = asprintf(&path, "%s/%s", dirname, name);
+
+	/*
+	 * asprintf returns -1 on allocation or other errors, leaving 'path'
+	 * undefined. We shouldn't even call free(path) here. We want to return
+	 * NULL on error, so we must manually set it.
+	 */
+	if (ret < 0)
+		path = NULL;
 
 	return path;
 }
@@ -192,10 +201,12 @@ static char *udc_find_video_device(const char *udc, const char *function)
 	char *video = NULL;
 	glob_t globbuf;
 	unsigned int i;
+	int ret;
 
-	asprintf(&vpath, "/sys/class/udc/%s/device/gadget/video4linux/video*",
-		 udc ? udc : "*");
-	if (!vpath)
+	ret = asprintf(&vpath,
+		       "/sys/class/udc/%s/device/gadget/video4linux/video*",
+		       udc ? udc : "*");
+	if (!ret)
 		return NULL;
 
 	glob(vpath, 0, NULL, &globbuf);
