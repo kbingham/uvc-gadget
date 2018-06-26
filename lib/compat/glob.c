@@ -23,6 +23,12 @@
 #define __glibc_unlikely(x)		x
 #define __libc_use_alloca(x)		0
 #define alloca_account(size, avar)	alloca(size)
+#ifndef __THROWNL
+#define __THROWNL
+#endif
+#ifndef __attribute_noinline__
+#define __attribute_noinline__
+#endif
 
 #include <glob.h>
 
@@ -604,7 +610,7 @@ glob (const char *pattern, int flags, int (*errfunc) (const char *, int),
 	}
     }
 
-#ifndef VMS
+#if !defined(VMS) && !defined(ANDROID)
   if ((flags & (GLOB_TILDE|GLOB_TILDE_CHECK)) && dirname[0] == '~')
     {
       if (dirname[1] == '\0' || dirname[1] == '/'
@@ -973,7 +979,7 @@ glob (const char *pattern, int flags, int (*errfunc) (const char *, int),
 	}
 # endif	/* Not Amiga && not WINDOWS32.  */
     }
-#endif	/* Not VMS.  */
+#endif	/* Not VMS && not ANDROID.  */
 
   /* Now test whether we looked for "~" or "~NAME".  In this case we
      can give the answer now.  */

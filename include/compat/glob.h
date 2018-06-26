@@ -18,6 +18,10 @@
 #ifndef	_GLOB_H
 #define	_GLOB_H	1
 
+#ifndef __THROW
+#define __THROW
+#endif
+
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
