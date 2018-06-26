@@ -346,20 +346,20 @@ static const struct uvc_function_config g_webcam_config = {
 	},
 };
 
+static void *memdup(const void *src, size_t size)
+{
+	void *dst;
+
+	dst = malloc(size);
+	if (!dst)
+		return NULL;
+	memcpy(dst, src, size);
+	return dst;
+}
+
 static int parse_legacy_g_webcam(const char *udc,
 				 struct uvc_function_config *fc)
 {
-	void *memdup(const void *src, size_t size)
-	{
-		void *dst;
-
-		dst = malloc(size);
-		if (!dst)
-			return NULL;
-		memcpy(dst, src, size);
-		return dst;
-	}
-
 	unsigned int i, j;
 	size_t size;
 
@@ -547,34 +547,34 @@ static int configfs_parse_streaming_frame(const char *path,
 	return ret;
 }
 
+static int frame_filter(const struct dirent *ent)
+{
+	/* Accept all directories but "." and "..". */
+	if (ent->d_type != DT_DIR)
+		return 0;
+	if (!strcmp(ent->d_name, "."))
+		return 0;
+	if (!strcmp(ent->d_name, ".."))
+		return 0;
+	return 1;
+}
+
+static int frame_compare(const void *a, const void *b)
+{
+	const struct uvc_function_config_frame *fa = a;
+	const struct uvc_function_config_frame *fb = b;
+
+	if (fa->index < fb->index)
+		return -1;
+	else if (fa->index == fb->index)
+		return 0;
+	else
+		return 1;
+}
+
 static int configfs_parse_streaming_format(const char *path,
 			struct uvc_function_config_format *format)
 {
-	int frame_filter(const struct dirent *ent)
-	{
-		/* Accept all directories but "." and "..". */
-		if (ent->d_type != DT_DIR)
-			return 0;
-		if (!strcmp(ent->d_name, "."))
-			return 0;
-		if (!strcmp(ent->d_name, ".."))
-			return 0;
-		return 1;
-	}
-
-	int frame_compare(const void *a, const void *b)
-	{
-		const struct uvc_function_config_frame *fa = a;
-		const struct uvc_function_config_frame *fb = b;
-
-		if (fa->index < fb->index)
-			return -1;
-		else if (fa->index == fb->index)
-			return 0;
-		else
-			return 1;
-	}
-
 	struct dirent **entries;
 	unsigned int i;
 	int n_entries;
@@ -640,43 +640,43 @@ done:
 	return ret;
 }
 
+static int format_filter(const struct dirent *ent)
+{
+	char *path;
+	bool valid;
+
+	/*
+	 * Accept all links that point to a directory containing a
+	 * "bFormatIndex" file.
+	 */
+	if (ent->d_type != DT_LNK)
+		return 0;
+
+	path = path_join(ent->d_name, "bFormatIndex");
+	if (!path)
+		return 0;
+
+	valid = access(path, R_OK);
+	free(path);
+	return valid;
+}
+
+static int format_compare(const void *a, const void *b)
+{
+	const struct uvc_function_config_format *fa = a;
+	const struct uvc_function_config_format *fb = b;
+
+	if (fa->index < fb->index)
+		return -1;
+	else if (fa->index == fb->index)
+		return 0;
+	else
+		return 1;
+}
+
 static int configfs_parse_streaming_header(const char *path,
 			struct uvc_function_config_streaming *cfg)
 {
-	int format_filter(const struct dirent *ent)
-	{
-		char *path;
-		bool valid;
-
-		/*
-		 * Accept all links that point to a directory containing a
-		 * "bFormatIndex" file.
-		 */
-		if (ent->d_type != DT_LNK)
-			return 0;
-
-		path = path_join(ent->d_name, "bFormatIndex");
-		if (!path)
-			return 0;
-
-		valid = access(path, R_OK);
-		free(path);
-		return valid;
-	}
-
-	int format_compare(const void *a, const void *b)
-	{
-		const struct uvc_function_config_format *fa = a;
-		const struct uvc_function_config_format *fb = b;
-
-		if (fa->index < fb->index)
-			return -1;
-		else if (fa->index == fb->index)
-			return 0;
-		else
-			return 1;
-	}
-
 	struct dirent **entries;
 	unsigned int i;
 	int n_entries;
@@ -724,15 +724,15 @@ done:
 	return ret;
 }
 
+static int link_filter(const struct dirent *ent)
+{
+	/* Accept all links. */
+	return ent->d_type == DT_LNK;
+}
+
 static int configfs_parse_streaming(const char *path,
 				    struct uvc_function_config_streaming *cfg)
 {
-	int link_filter(const struct dirent *ent)
-	{
-		/* Accept all links. */
-		return ent->d_type == DT_LNK;
-	}
-
 	char *header;
 	char *class;
 	int ret;
