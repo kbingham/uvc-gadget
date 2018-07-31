@@ -399,6 +399,46 @@ static int parse_legacy_g_webcam(const char *udc,
  */
 
 /*
+ * configfs_mount_point - Identify the ConfigFS mount location
+ *
+ * Return a pointer to a newly allocated string containing the fully qualified
+ * path to the ConfigFS mount point if located. Returns NULL if the ConfigFS
+ * mount point can not be identified.
+ */
+static char *configfs_mount_point(void)
+{
+	FILE *mounts;
+	char *line = NULL;
+	char *path = NULL;
+	size_t len = 0;
+
+	mounts = fopen("/proc/mounts", "r");
+	if (mounts == NULL)
+		return NULL;
+
+	while (getline(&line, &len, mounts) != -1) {
+		if (strstr(line, "configfs")) {
+			char *saveptr;
+			char *token;
+
+			/* Obtain the second token. */
+			token = strtok_r(line, " ", &saveptr);
+			token = strtok_r(NULL, " ", &saveptr);
+
+			if (token)
+				path = strdup(token);
+
+			break;
+		}
+	}
+
+	free(line);
+	fclose(mounts);
+
+	return path;
+}
+
+/*
  * configfs_find_uvc_function - Find the ConfigFS full path for a UVC function
  * @function: The UVC function name
  *
@@ -409,9 +449,15 @@ static int parse_legacy_g_webcam(const char *udc,
 static char *configfs_find_uvc_function(const char *function)
 {
 	const char *target = function ? function : "*";
-	const char *root;
+	const char *format;
+	char *configfs;
 	char *func_path;
 	char *path;
+	int ret;
+
+	configfs = configfs_mount_point();
+	if (!configfs)
+		printf("Failed to locate configfs mount point, using default\n");
 
 	/*
 	 * The function description can be provided as a path from the
@@ -419,11 +465,15 @@ static char *configfs_find_uvc_function(const char *function)
 	 * over the gadget name, a shortcut "uvc.0" can be provided.
 	 */
 	if (!strchr(target, '/'))
-		root = "/sys/kernel/config/usb_gadget/*/functions";
+		format = "%s/usb_gadget/*/functions/%s";
 	else
-		root = "/sys/kernel/config/usb_gadget";
+		format = "%s/usb_gadget/%s";
 
-	path = path_join(root, target);
+	ret = asprintf(&path, format, configfs ? configfs : "/sys/kernel/config",
+		       target);
+	free(configfs);
+	if (!ret)
+		return NULL;
 
 	func_path = path_glob_first_match(path);
 	free(path);
