@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-2.0+ */
-/* This file is imported from the Linux kernel, don't modify it manually. */
 /*
  * g_uvc.h  --  USB Video Class Gadget driver API
  *
@@ -12,6 +11,7 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 #include <linux/usb/ch9.h>
+#include <linux/videodev2.h>
 
 #define UVC_EVENT_FIRST			(V4L2_EVENT_PRIVATE_START + 0)
 #define UVC_EVENT_CONNECT		(V4L2_EVENT_PRIVATE_START + 0)
@@ -24,7 +24,8 @@
 
 struct uvc_request_data {
 	__s32 length;
-	__u8 data[60];
+	struct usb_ctrlrequest setup;
+	__u8 data[52];
 };
 
 struct uvc_event {
