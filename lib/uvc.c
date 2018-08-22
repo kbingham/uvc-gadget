@@ -161,11 +161,6 @@ uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs,
 	resp->length = sizeof *ctrl;
 
 	switch (req) {
-	case UVC_SET_CUR:
-		dev->control = cs;
-		resp->length = 34;
-		break;
-
 	case UVC_GET_CUR:
 		if (cs == UVC_VS_PROBE_CONTROL)
 			memcpy(ctrl, &dev->probe, sizeof *ctrl);
@@ -214,7 +209,7 @@ uvc_events_process_class(struct uvc_device *dev,
 }
 
 static void
-uvc_events_process_setup(struct uvc_device *dev,
+uvc_events_process_control_get(struct uvc_device *dev,
 			 const struct usb_ctrlrequest *ctrl,
 			 struct uvc_request_data *resp)
 {
@@ -239,12 +234,20 @@ uvc_events_process_setup(struct uvc_device *dev,
 }
 
 static void
-uvc_events_process_data(struct uvc_device *dev,
-			const struct uvc_request_data *data)
+uvc_events_process_control_set(struct uvc_device *dev,
+			const struct uvc_request_data *data,
+			struct uvc_request_data *resp)
 {
 	const struct uvc_streaming_control *ctrl =
 		(const struct uvc_streaming_control *)&data->data;
 	struct uvc_streaming_control *target;
+	const struct usb_ctrlrequest *usb_ctrl = &data->setup;
+
+	printf("bRequestType %02x bRequest %02x wValue %04x wIndex %04x "
+		"wLength %04x\n", usb_ctrl->bRequestType, usb_ctrl->bRequest,
+		usb_ctrl->wValue, usb_ctrl->wIndex, usb_ctrl->wLength);
+
+	dev->control = usb_ctrl->wValue >> 8;
 
 	switch (dev->control) {
 	case UVC_VS_PROBE_CONTROL:
@@ -287,6 +290,8 @@ uvc_events_process_data(struct uvc_device *dev,
 
 		uvc_stream_set_format(dev->stream, &pixfmt);
 	}
+
+	resp->length = 0;
 }
 
 static void uvc_events_process(void *d)
@@ -313,12 +318,12 @@ static void uvc_events_process(void *d)
 		return;
 
 	case UVC_EVENT_SETUP:
-		uvc_events_process_setup(dev, &uvc_event->req, &resp);
+		uvc_events_process_control_get(dev, &uvc_event->req, &resp);
 		break;
 
 	case UVC_EVENT_DATA:
-		uvc_events_process_data(dev, &uvc_event->data);
-		return;
+		uvc_events_process_control_set(dev, &uvc_event->data, &resp);
+		break;
 
 	case UVC_EVENT_STREAMON:
 		uvc_stream_enable(dev->stream, 1);
