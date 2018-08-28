@@ -29,6 +29,11 @@ int video_source_set_format(struct video_source *src,
 	return src->ops->set_format(src, fmt);
 }
 
+int video_source_set_frame_rate(struct video_source *src, unsigned int fps)
+{
+	return src->ops->set_frame_rate(src, fps);
+}
+
 int video_source_alloc_buffers(struct video_source *src, unsigned int nbufs)
 {
 	return src->ops->alloc_buffers(src, nbufs);
