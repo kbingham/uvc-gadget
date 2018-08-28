@@ -54,6 +54,13 @@ static int v4l2_source_set_format(struct video_source *s,
 	return v4l2_set_format(src->vdev, fmt);
 }
 
+static int v4l2_source_set_frame_rate(struct video_source *s, unsigned int fps)
+{
+	struct v4l2_source *src = to_v4l2_source(s);
+
+	return v4l2_set_frame_rate(src->vdev, fps);
+}
+
 static int v4l2_source_alloc_buffers(struct video_source *s, unsigned int nbufs)
 {
 	struct v4l2_source *src = to_v4l2_source(s);
@@ -144,6 +151,7 @@ static int v4l2_source_queue_buffer(struct video_source *s,
 static const struct video_source_ops v4l2_source_ops = {
 	.destroy = v4l2_source_destroy,
 	.set_format = v4l2_source_set_format,
+	.set_frame_rate = v4l2_source_set_frame_rate,
 	.alloc_buffers = v4l2_source_alloc_buffers,
 	.export_buffers = v4l2_source_export_buffers,
 	.free_buffers = v4l2_source_free_buffers,
