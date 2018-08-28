@@ -18,6 +18,7 @@ struct video_source;
 struct video_source_ops {
 	void(*destroy)(struct video_source *src);
 	int(*set_format)(struct video_source *src, struct v4l2_pix_format *fmt);
+	int(*set_frame_rate)(struct video_source *src, unsigned int fps);
 	int(*alloc_buffers)(struct video_source *src, unsigned int nbufs);
 	int(*export_buffers)(struct video_source *src,
 			     struct video_buffer_set **buffers);
@@ -43,6 +44,7 @@ void video_source_set_buffer_handler(struct video_source *src,
 void video_source_destroy(struct video_source *src);
 int video_source_set_format(struct video_source *src,
 			    struct v4l2_pix_format *fmt);
+int video_source_set_frame_rate(struct video_source *src, unsigned int fps);
 int video_source_alloc_buffers(struct video_source *src, unsigned int nbufs);
 int video_source_export_buffers(struct video_source *src,
 				struct video_buffer_set **buffers);
