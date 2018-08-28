@@ -156,6 +156,12 @@ int uvc_stream_set_format(struct uvc_stream *stream,
 	return video_source_set_format(stream->src, &fmt);
 }
 
+int uvc_stream_set_frame_rate(struct uvc_stream *stream, unsigned int fps)
+{
+	printf("=== Setting frame rate to %u fps\n", fps);
+	return video_source_set_frame_rate(stream->src, fps);
+}
+
 /* ---------------------------------------------------------------------------
  * Stream handling
  */

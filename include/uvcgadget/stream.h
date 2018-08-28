@@ -91,6 +91,19 @@ int uvc_stream_set_format(struct uvc_stream *stream,
 			  const struct v4l2_pix_format *format);
 
 /*
+ * uvc_stream_set_frame_rate - Set the frame rate for the stream
+ * @stream: the UVC stream
+ * @fps:    the frame rate in frames per second
+ *
+ * This function is called from the UVC protocol handler to configure the frame
+ * rate for the video source of the @stream. It must not be called directly by
+ * applications.
+ *
+ * Returns 0 on success, or a negative error code on failure.
+ */
+int uvc_stream_set_frame_rate(struct uvc_stream *stream, unsigned int fps);
+
+/*
  * uvc_stream_enable - Turn on/off video streaming for the UVC stream
  * @stream: the UVC stream
  * @enable: 0 to stop the stream, 1 to start it
