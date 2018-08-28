@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
 	char *function = NULL;
 	char *cap_device = "/dev/video1";
 	struct uvc_function_config *fc;
-	struct uvc_stream *stream;
+	struct uvc_stream *stream = NULL;
 	struct video_source *src = NULL;
 	struct events events;
 	int ret = 0;
