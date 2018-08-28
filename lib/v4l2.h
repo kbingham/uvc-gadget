@@ -31,6 +31,7 @@ struct v4l2_device
 	struct list_entry formats;
 	struct v4l2_pix_format format;
 	struct v4l2_rect crop;
+	unsigned int fps;
 
 	struct video_buffer_set buffers;
 };
@@ -84,6 +85,19 @@ int v4l2_get_format(struct v4l2_device *dev, struct v4l2_pix_format *format);
  * Return 0 on success or a negative error code on failure.
  */
 int v4l2_set_format(struct v4l2_device *dev, struct v4l2_pix_format *format);
+
+/*
+ * v4l2_set_frame_rate - Set the frame rate
+ * @dev: Device instance
+ * @fps: Frame rate
+ *
+ * Set the frame rate specified by @fps.
+ * The device can modify the requested format and size, in which case @dev->fps
+ * will be updated to reflect the modified setting.
+ *
+ * Return 0 on success or a negative error code on failure.
+ */
+int v4l2_set_frame_rate(struct v4l2_device *dev, unsigned int fps);
 
 /*
  * v4l2_get_crop - Retrieve the current crop rectangle
