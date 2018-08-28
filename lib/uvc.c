@@ -269,6 +269,7 @@ uvc_events_process_data(struct uvc_device *dev,
 		const struct uvc_function_config_format *format;
 		const struct uvc_function_config_frame *frame;
 		struct v4l2_pix_format pixfmt;
+		unsigned int fps;
 
 		format = &dev->fc->streaming.formats[target->bFormatIndex-1];
 		frame = &format->frames[target->bFrameIndex-1];
@@ -286,6 +287,10 @@ uvc_events_process_data(struct uvc_device *dev,
 			pixfmt.sizeimage = dev->maxsize * 1.5;
 
 		uvc_stream_set_format(dev->stream, &pixfmt);
+
+		/* fps is guaranteed to be non-zero and thus valid. */
+		fps = 1.0 / (target->dwFrameInterval / 10000000.0);
+		uvc_stream_set_frame_rate(dev->stream, fps);
 	}
 }
 
