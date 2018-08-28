@@ -8,6 +8,7 @@
  */
 
 #include <errno.h>
+#include <limits.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb/g_uvc.h>
 #include <linux/usb/video.h>
@@ -171,8 +172,10 @@ uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs,
 	case UVC_GET_MIN:
 	case UVC_GET_MAX:
 	case UVC_GET_DEF:
-		uvc_fill_streaming_control(dev, ctrl, req == UVC_GET_MAX ? -1 : 1,
-					   req == UVC_GET_MAX ? -1 : 1, 0);
+		if (req == UVC_GET_MAX)
+			uvc_fill_streaming_control(dev, ctrl, -1, -1, UINT_MAX);
+		else
+			uvc_fill_streaming_control(dev, ctrl, 1, 1, 0);
 		break;
 
 	case UVC_GET_RES:
