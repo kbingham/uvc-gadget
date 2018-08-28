@@ -500,6 +500,26 @@ int v4l2_set_format(struct v4l2_device *dev, struct v4l2_pix_format *format)
 	return 0;
 }
 
+int v4l2_set_frame_rate(struct v4l2_device *dev, unsigned int fps)
+{
+	struct v4l2_streamparm parm;
+	int ret;
+
+	memset(&parm, 0, sizeof parm);
+	parm.type = dev->type;
+	parm.parm.capture.timeperframe.numerator = 1;
+	parm.parm.capture.timeperframe.denominator = fps;
+
+	ret = ioctl(dev->fd, VIDIOC_S_PARM, &parm);
+	if (ret < 0) {
+		printf("%s: unable to set frame rate (%d).\n", dev->name, errno);
+		return -errno;
+	}
+
+	dev->fps = fps;
+	return 0;
+}
+
 /* -----------------------------------------------------------------------------
  * Buffers management
  */
