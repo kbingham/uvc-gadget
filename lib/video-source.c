@@ -65,3 +65,9 @@ int video_source_queue_buffer(struct video_source *src,
 {
 	return src->ops->queue_buffer(src, buf);
 }
+
+void video_source_fill_buffer(struct video_source *src,
+			      struct video_buffer *buf)
+{
+	src->ops->fill_buffer(src, buf);
+}
