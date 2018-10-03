@@ -15,6 +15,7 @@
 #include "events.h"
 #include "stream.h"
 #include "v4l2-source.h"
+#include "test-source.h"
 
 static void usage(const char *argv0)
 {
@@ -56,7 +57,7 @@ static void sigint_handler(int signal)
 int main(int argc, char *argv[])
 {
 	char *function = NULL;
-	char *cap_device = "/dev/video1";
+	char *cap_device = NULL;
 	struct uvc_function_config *fc;
 	struct uvc_stream *stream = NULL;
 	struct video_source *src = NULL;
@@ -101,13 +102,17 @@ int main(int argc, char *argv[])
 	signal(SIGINT, sigint_handler);
 
 	/* Create and initialize a video source. */
-	src = v4l2_video_source_create(cap_device);
+	if (cap_device)
+		src = v4l2_video_source_create(cap_device);
+	else
+		src = test_video_source_create();
 	if (src == NULL) {
 		ret = 1;
 		goto done;
 	}
 
-	v4l2_video_source_init(src, &events);
+	if (cap_device)
+		v4l2_video_source_init(src, &events);
 
 	/* Create and initialise the stream. */
 	stream = uvc_stream_new(fc->video);
