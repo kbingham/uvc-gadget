@@ -636,8 +636,13 @@ static int configfs_parse_streaming_format(const char *path,
 
 	ret = attribute_read(path, "guidFormat", format->guid,
 			     sizeof(format->guid));
-	if (ret < 0)
-		return ret;
+	if (ret < 0) {
+		if (!strstr(path, "mjpeg"))
+			return ret;
+		uint8_t guid[16] = UVC_GUID_FORMAT_MJPEG;
+		memcpy(format->guid, guid, 16);
+		ret = 16;
+	}
 	if (ret != 16)
 		return -EINVAL;
 
