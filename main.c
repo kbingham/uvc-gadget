@@ -21,8 +21,8 @@ static void usage(const char *argv0)
 	fprintf(stderr, "Usage: %s [options] <uvc device>\n", argv0);
 	fprintf(stderr, "Available options are\n");
 	fprintf(stderr, " -c device	V4L2 source device\n");
-	fprintf(stderr, " -h		Print this help screen and exit\n");
 	fprintf(stderr, " -i image	MJPEG image\n");
+	fprintf(stderr, " -h		Print this help screen and exit\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, " <uvc device>	UVC device instance specifier\n");
 	fprintf(stderr, "\n");
@@ -38,10 +38,10 @@ static void usage(const char *argv0)
 	fprintf(stderr, "  gadget identified will be used.\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Example usage:\n");
-	fprintf(stderr, "    uvc-gadget uvc.1\n");
-	fprintf(stderr, "    uvc-gadget g1/functions/uvc.1\n");
+	fprintf(stderr, "    %s uvc.1\n", argv0);
+	fprintf(stderr, "    %s g1/functions/uvc.1\n", argv0);
 	fprintf(stderr, "\n");
-	fprintf(stderr, "    uvc-gadget musb-hdrc.0.auto\n");
+	fprintf(stderr, "    %s musb-hdrc.0.auto\n", argv0);
 }
 
 /* Necessary for and only used by signal handler. */
