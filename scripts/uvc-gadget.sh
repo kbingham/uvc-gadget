@@ -87,13 +87,15 @@ delete_msd() {
 
 create_frame() {
 	# Example usage:
-	# create_frame <function name> <width> <height>
+	# create_frame <function name> <width> <height> <format> <name>
 
 	FUNCTION=$1
 	WIDTH=$2
 	HEIGHT=$3
+	FORMAT=$4
+	NAME=$5
 
-	wdir=functions/$FUNCTION/streaming/uncompressed/u/${HEIGHT}p
+	wdir=functions/$FUNCTION/streaming/$FORMAT/$NAME/${HEIGHT}p
 
 	mkdir -p $wdir
 	echo $WIDTH > $wdir/wWidth
@@ -116,13 +118,15 @@ create_uvc() {
 	echo "	Creating UVC gadget functionality : $FUNCTION"
 	mkdir functions/$FUNCTION
 
-	create_frame $FUNCTION 640 360
-	create_frame $FUNCTION 1280 720
-	create_frame $FUNCTION 320 180
+	create_frame $FUNCTION 640 360 uncompressed u
+	create_frame $FUNCTION 1280 720 uncompressed u
+	create_frame $FUNCTION 320 180 uncompressed u
+	create_frame $FUNCTION 640 360 mjpeg mjpeg
 
 	mkdir functions/$FUNCTION/streaming/header/h
 	cd functions/$FUNCTION/streaming/header/h
 	ln -s ../../uncompressed/u
+	ln -s ../../mjpeg/mjpeg
 	cd ../../class/fs
 	ln -s ../../header/h
 	cd ../../class/hs
@@ -156,6 +160,8 @@ delete_uvc() {
 	rm functions/$FUNCTION/streaming/header/h/u
 	rmdir functions/$FUNCTION/streaming/uncompressed/u/*/
 	rmdir functions/$FUNCTION/streaming/uncompressed/u
+	rm -rf functions/$FUNCTION/streaming/mjpeg/mjpeg/*/
+	rm -rf functions/$FUNCTION/streaming/mjpeg/mjpeg
 	rmdir functions/$FUNCTION/streaming/header/h
 	rmdir functions/$FUNCTION/control/header/h
 	rmdir functions/$FUNCTION
