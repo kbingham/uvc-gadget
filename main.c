@@ -16,6 +16,7 @@
 #include "stream.h"
 #include "v4l2-source.h"
 #include "test-source.h"
+#include "jpg-source.h"
 
 static void usage(const char *argv0)
 {
@@ -58,6 +59,7 @@ int main(int argc, char *argv[])
 {
 	char *function = NULL;
 	char *cap_device = NULL;
+	char *img_path = NULL;
 	struct uvc_function_config *fc;
 	struct uvc_stream *stream = NULL;
 	struct video_source *src = NULL;
@@ -65,10 +67,14 @@ int main(int argc, char *argv[])
 	int ret = 0;
 	int opt;
 
-	while ((opt = getopt(argc, argv, "c:h")) != -1) {
+	while ((opt = getopt(argc, argv, "c:i:h")) != -1) {
 		switch (opt) {
 		case 'c':
 			cap_device = optarg;
+			break;
+
+		case 'i':
+			img_path = optarg;
 			break;
 
 		case 'h':
@@ -91,6 +97,12 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+	if (cap_device != NULL && img_path != NULL) {
+		printf("Both capture device and still image specified\n");
+		printf("Please specify only one\n");
+		return 1;
+	}
+
 	/*
 	 * Create the events handler. Register a signal handler for SIGINT,
 	 * received when the user presses CTRL-C. This will allow the main loop
@@ -104,6 +116,8 @@ int main(int argc, char *argv[])
 	/* Create and initialize a video source. */
 	if (cap_device)
 		src = v4l2_video_source_create(cap_device);
+	else if (img_path)
+		src = jpg_video_source_create(img_path);
 	else
 		src = test_video_source_create();
 	if (src == NULL) {
