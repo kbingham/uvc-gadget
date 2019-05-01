@@ -626,6 +626,8 @@ static int configfs_parse_streaming_format(const char *path,
 			struct uvc_function_config_format *format)
 {
 	struct dirent **entries;
+	char link_target[1024];
+	char *segment;
 	unsigned int i;
 	int n_entries;
 	int ret;
@@ -634,12 +636,37 @@ static int configfs_parse_streaming_format(const char *path,
 	if (ret < 0)
 		return ret;
 
-	ret = attribute_read(path, "guidFormat", format->guid,
-			     sizeof(format->guid));
+	ret = readlink(path, link_target, sizeof(link_target) - 1);
 	if (ret < 0)
 		return ret;
-	if (ret != 16)
+
+	link_target[ret] = '\0';
+
+	/*
+	 * Extract the second-to-last path component of the link target,
+	 * which contains the format descriptor type name as exposed by
+	 * the UVC function driver.
+	 */
+	segment = strrchr(link_target, '/');
+	if (!segment)
 		return -EINVAL;
+	*segment = '\0';
+	segment = strrchr(link_target, '/');
+	if (!segment)
+		return -EINVAL;
+	segment++;
+
+	if (!strcmp(segment, "mjpeg")) {
+		static const uint8_t guid[16] = UVC_GUID_FORMAT_MJPEG;
+		memcpy(format->guid, guid, 16);
+	} else if (!strcmp(segment, "uncompressed")) {
+		ret = attribute_read(path, "guidFormat", format->guid,
+				     sizeof(format->guid));
+		if (ret < 0)
+			return ret;
+	} else {
+		return -EINVAL;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(uvc_formats); ++i) {
 		if (!memcmp(uvc_formats[i].guid, format->guid, 16)) {
