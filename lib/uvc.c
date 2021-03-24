@@ -246,8 +246,8 @@ uvc_events_process_control_set(struct uvc_device *dev,
 	struct uvc_streaming_control *target;
 	const struct usb_ctrlrequest *usb_ctrl = &data->setup;
 
-	printf("bRequestType %02x bRequest %02x wValue %04x wIndex %04x "
-		"wLength %04x\n", usb_ctrl->bRequestType, usb_ctrl->bRequest,
+	printf("bRequestType: 0x%02x, bRequest: 0x%02x, wValue: 0x%04x, wIndex: 0x%04x, "
+		"wLength: 0x%04x\n", usb_ctrl->bRequestType, usb_ctrl->bRequest,
 		usb_ctrl->wValue, usb_ctrl->wIndex, usb_ctrl->wLength);
 
 	dev->control = usb_ctrl->wValue >> 8;
@@ -299,7 +299,7 @@ uvc_events_process_control_set(struct uvc_device *dev,
 		uvc_stream_set_frame_rate(dev->stream, fps);
 	}
 
-	resp->length = 0;
+	resp->length = data->length;
 }
 
 static void uvc_events_process(void *d)
