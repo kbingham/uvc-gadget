@@ -120,6 +120,13 @@ v4l2_enum_frame_intervals(struct v4l2_device *dev, struct v4l2_format_desc *form
 			ival->step = ivalenum.stepwise.step;
 			break;
 
+		case V4L2_FRMIVAL_TYPE_CONTINUOUS:
+			ival->min = (struct v4l2_fract) {1, 90};	// FPS_MAX 90
+			ival->max = (struct v4l2_fract) {1, 1};		// FPS_MIN 1
+			ival->step.numerator = 1;
+			ival->step.denominator = 1;
+			break;
+
 		default:
 			printf("Error: driver returned invalid frame ival "
 				"type %u\n", ivalenum.type);
