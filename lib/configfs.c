@@ -634,17 +634,21 @@ static int configfs_parse_streaming_format(const char *path,
 	if (ret < 0)
 		return ret;
 
-	ret = attribute_read(path, "guidFormat", format->guid,
-			     sizeof(format->guid));
-	if (ret < 0) {
-		if (!strstr(path, "mjpeg"))
-			return ret;
-		uint8_t guid[16] = UVC_GUID_FORMAT_MJPEG;
-		memcpy(format->guid, guid, 16);
-		ret = 16;
-	}
-	if (ret != 16)
-		return -EINVAL;
+	// ret = attribute_read(path, "guidFormat", format->guid,
+	// 		     sizeof(format->guid));
+	// if (ret < 0) {
+	// 	if (!strstr(path, "mjpeg"))
+	// 		return ret;
+	// 	uint8_t guid[16] = UVC_GUID_FORMAT_MJPEG;
+	// 	memcpy(format->guid, guid, 16);
+	// 	ret = 16;
+	// }
+	// if (ret != 16)
+	// 	return -EINVAL;
+
+	uint8_t guid[16] = UVC_GUID_FORMAT_MJPEG;
+	memcpy(format->guid, guid, 16);
+	ret = 16;
 
 	for (i = 0; i < ARRAY_SIZE(uvc_formats); ++i) {
 		if (!memcmp(uvc_formats[i].guid, format->guid, 16)) {
