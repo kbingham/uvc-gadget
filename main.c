@@ -28,6 +28,7 @@ static void usage(const char *argv0)
 	fprintf(stderr, " -i image	MJPEG image\n");
 	fprintf(stderr, " -s directory	directory of slideshow images\n");
 	fprintf(stderr, " -k keypad	keypad device (default: /dev/input/event1)\n");
+	fprintf(stderr, " -v		use verbose logging\n");
 	fprintf(stderr, " -h		Print this help screen and exit\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, " <uvc device>	UVC device instance specifier\n");
@@ -74,7 +75,9 @@ int main(int argc, char *argv[])
 	int ret = 0;
 	int opt;
 
-	while ((opt = getopt(argc, argv, "c:i:s:k:h")) != -1) {
+	log_set_level(LOG_INFO);
+
+	while ((opt = getopt(argc, argv, "c:i:s:k:vh")) != -1) {
 		switch (opt) {
 		case 'c':
 			cap_device = optarg;
@@ -90,6 +93,9 @@ int main(int argc, char *argv[])
 
 		case 'k':
 			keypad = optarg;
+			break;
+		case 'v':
+			log_set_level(LOG_TRACE);
 			break;
 
 		case 'h':
