@@ -1,4 +1,4 @@
-file(GLOB SOURCES "*.c" "*.h")
+file(GLOB SOURCES "*.c")
 file(GLOB HEADERS "../include/uvcgadget/*.h")
 
 add_subdirectory(compat)
