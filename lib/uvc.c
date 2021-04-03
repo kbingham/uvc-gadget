@@ -23,6 +23,7 @@
 #include "tools.h"
 #include "uvc.h"
 #include "v4l2.h"
+#include "log.h"
 
 struct uvc_device
 {
@@ -132,7 +133,7 @@ uvc_events_process_standard(struct uvc_device *dev,
 			    const struct usb_ctrlrequest *ctrl,
 			    struct uvc_request_data *resp)
 {
-	printf("standard request\n");
+	log_debug("STUB! standard request");
 	(void)dev;
 	(void)ctrl;
 	(void)resp;
@@ -142,7 +143,7 @@ static void
 uvc_events_process_control(struct uvc_device *dev, uint8_t req, uint8_t cs,
 			   struct uvc_request_data *resp)
 {
-	printf("control request (req %02x cs %02x)\n", req, cs);
+	log_debug("STUB! control request (req 0x%02x cs 0x%02x)", req, cs);
 	(void)dev;
 	(void)resp;
 }
@@ -153,7 +154,7 @@ uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs,
 {
 	struct uvc_streaming_control *ctrl;
 
-	printf("streaming request (req %02x cs %02x)\n", req, cs);
+	log_debug("streaming request (req 0x%02x cs 0x%02x)", req, cs);
 
 	if (cs != UVC_VS_PROBE_CONTROL && cs != UVC_VS_COMMIT_CONTROL)
 		return;
@@ -218,9 +219,7 @@ uvc_events_process_control_get(struct uvc_device *dev,
 {
 	dev->control = 0;
 
-	printf("bRequestType %02x bRequest %02x wValue %04x wIndex %04x "
-		"wLength %04x\n", ctrl->bRequestType, ctrl->bRequest,
-		ctrl->wValue, ctrl->wIndex, ctrl->wLength);
+	dump_usb_ctrlrequest(ctrl);
 
 	switch (ctrl->bRequestType & USB_TYPE_MASK) {
 	case USB_TYPE_STANDARD:
@@ -246,25 +245,23 @@ uvc_events_process_control_set(struct uvc_device *dev,
 	struct uvc_streaming_control *target;
 	const struct usb_ctrlrequest *usb_ctrl = &data->setup;
 
-	printf("bRequestType: 0x%02x, bRequest: 0x%02x, wValue: 0x%04x, wIndex: 0x%04x, "
-		"wLength: 0x%04x\n", usb_ctrl->bRequestType, usb_ctrl->bRequest,
-		usb_ctrl->wValue, usb_ctrl->wIndex, usb_ctrl->wLength);
+	dump_usb_ctrlrequest(usb_ctrl);
 
 	dev->control = usb_ctrl->wValue >> 8;
 
 	switch (dev->control) {
 	case UVC_VS_PROBE_CONTROL:
-		printf("setting probe control, length = %d\n", data->length);
+		log_debug("setting probe control, length = %d", data->length);
 		target = &dev->probe;
 		break;
 
 	case UVC_VS_COMMIT_CONTROL:
-		printf("setting commit control, length = %d\n", data->length);
+		log_debug("setting commit control, length = %d", data->length);
 		target = &dev->commit;
 		break;
 
 	default:
-		printf("setting unknown control, length = %d\n", data->length);
+		log_error("unknown control, length = %d", data->length);
 		return;
 	}
 
@@ -299,7 +296,7 @@ uvc_events_process_control_set(struct uvc_device *dev,
 		uvc_stream_set_frame_rate(dev->stream, fps);
 	}
 
-	resp->length = data->length;
+	resp->length = 0;
 }
 
 static void uvc_events_process(void *d)
@@ -312,7 +309,7 @@ static void uvc_events_process(void *d)
 
 	ret = ioctl(dev->vdev->fd, VIDIOC_DQEVENT, &v4l2_event);
 	if (ret < 0) {
-		printf("VIDIOC_DQEVENT failed: %s (%d)\n", strerror(errno),
+		log_error("VIDIOC_DQEVENT failed: %s (%d)", strerror(errno),
 			errno);
 		return;
 	}

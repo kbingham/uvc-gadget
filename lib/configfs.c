@@ -24,6 +24,7 @@
 
 #include "configfs.h"
 #include "tools.h"
+#include "log.h"
 
 /* -----------------------------------------------------------------------------
  * Path handling and support
@@ -110,7 +111,7 @@ static int attribute_read(const char *path, const char *file, void *buf,
 	fd = open(f, O_RDONLY);
 	free(f);
 	if (fd == -1) {
-		printf("Failed to open attribute %s: %s\n", file,
+		log_error("Failed to open attribute %s: %s", file,
 		       strerror(errno));
 		return -ENOENT;
 	}
@@ -119,7 +120,7 @@ static int attribute_read(const char *path, const char *file, void *buf,
 	close(fd);
 
 	if (ret < 0) {
-		printf("Failed to read attribute %s: %s\n", file,
+		log_error("Failed to read attribute %s: %s", file,
 		       strerror(errno));
 		return -ENODATA;
 	}
@@ -457,7 +458,7 @@ static char *configfs_find_uvc_function(const char *function)
 
 	configfs = configfs_mount_point();
 	if (!configfs)
-		printf("Failed to locate configfs mount point, using default\n");
+		log_error("Failed to locate configfs mount point, using default");
 
 	/*
 	 * The function description can be provided as a path from the
@@ -629,6 +630,8 @@ static int configfs_parse_streaming_format(const char *path,
 	unsigned int i;
 	int n_entries;
 	int ret;
+
+	log_debug("Parse streaming format: %s", path);
 
 	ret = attribute_read_uint(path, "bFormatIndex", &format->index);
 	if (ret < 0)

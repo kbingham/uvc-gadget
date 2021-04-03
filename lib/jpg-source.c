@@ -24,6 +24,7 @@
 #include "v4l2.h"
 #include "jpg-source.h"
 #include "video-buffers.h"
+#include "log.h"
 
 struct jpg_source {
 	struct video_source src;
@@ -47,7 +48,7 @@ static int jpg_source_set_format(struct video_source *s,
 				  struct v4l2_pix_format *fmt)
 {
 	if (fmt->pixelformat != v4l2_fourcc('M', 'J', 'P', 'G')) {
-		printf("======= INVALID FORMAT\n");
+		log_error("invalid pixel format");
 		return -EINVAL;
 	}
 
@@ -93,7 +94,7 @@ struct video_source *jpg_video_source_create(const char *img_path)
 	struct jpg_source *src;
 	int fd = -1;
 
-	printf("CREATING JPG VIDEO SOURCE\n");
+	log_debug("Creating JPG video source");
 
 	if (img_path == NULL)
 		return NULL;
@@ -107,7 +108,7 @@ struct video_source *jpg_video_source_create(const char *img_path)
 
 	fd = open(img_path, O_RDONLY);
 	if (fd == -1) {
-		printf("Unable to open MJPEG image '%s'\n", img_path);
+		log_error("Unable to open MJPEG image '%s'", img_path);
 		return NULL;
 	}
 
@@ -115,7 +116,7 @@ struct video_source *jpg_video_source_create(const char *img_path)
 	lseek(fd, 0, SEEK_SET);
 	src->imgdata = malloc(src->imgsize);
 	if (src->imgdata == NULL) {
-		printf("Unable to allocate memory for MJPEG image\n");
+		log_error("Unable to allocate memory for MJPEG image");
 		src->imgsize = 0;
 		return NULL;
 	}

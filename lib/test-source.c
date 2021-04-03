@@ -16,6 +16,7 @@
 #include "test-source.h"
 #include "tools.h"
 #include "video-buffers.h"
+#include "log.h"
 
 #define BLACK   0x80108010
 #define BLUE    0x7620f020

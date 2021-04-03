@@ -23,6 +23,8 @@
 #include "events.h"
 #include "list.h"
 #include "tools.h"
+#include "log.h"
+
 
 #define SELECT_TIMEOUT		2000		/* in milliseconds */
 
@@ -145,7 +147,7 @@ bool events_loop(struct events *events)
 			if (errno == EINTR)
 				continue;
 
-			printf("error: select failed with %d\n", errno);
+			log_error("select failed with %d\n", errno);
 			break;
 		}
 

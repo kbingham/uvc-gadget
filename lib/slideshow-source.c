@@ -26,6 +26,7 @@
 #include "tools.h"
 #include "slideshow-source.h"
 #include "video-buffers.h"
+#include "log.h"
 
 struct slide {
 	unsigned int index;
@@ -81,7 +82,7 @@ static int slideshow_source_set_format(struct video_source *s,
 				  struct v4l2_pix_format *fmt)
 {
 	if (fmt->pixelformat != v4l2_fourcc('M', 'J', 'P', 'G')) {
-		printf("======= INVALID FORMAT\n");
+		log_error("invalid pixel format");
 		return -EINVAL;
 	}
 

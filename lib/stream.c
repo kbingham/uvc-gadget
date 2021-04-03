@@ -17,6 +17,7 @@
 #include "v4l2.h"
 #include "video-buffers.h"
 #include "video-source.h"
+#include "log.h"
 
 /*
  * struct uvc_stream - Representation of a UVC stream
@@ -85,14 +86,14 @@ static int uvc_stream_start_alloc(struct uvc_stream *stream)
 	/* Allocate and export the buffers on the source. */
 	ret = video_source_alloc_buffers(stream->src, 4);
 	if (ret < 0) {
-		printf("Failed to allocate source buffers: %s (%d)\n",
+		log_error("Failed to allocate source buffers: %s (%d)",
 		       strerror(-ret), -ret);
 		return ret;
 	}
 
 	ret = video_source_export_buffers(stream->src, &buffers);
 	if (ret < 0) {
-		printf("Failed to export buffers on source: %s (%d)\n",
+		log_error("Failed to export buffers on source: %s (%d)",
 		       strerror(-ret), -ret);
 		goto error_free_source;
 	}
@@ -100,14 +101,14 @@ static int uvc_stream_start_alloc(struct uvc_stream *stream)
 	/* Allocate and import the buffers on the sink. */
 	ret = v4l2_alloc_buffers(sink, V4L2_MEMORY_DMABUF, buffers->nbufs);
 	if (ret < 0) {
-		printf("Failed to allocate sink buffers: %s (%d)\n",
+		log_error("Failed to allocate sink buffers: %s (%d)",
 		       strerror(-ret), -ret);
 		goto error_free_source;
 	}
 
 	ret = v4l2_import_buffers(sink, buffers);
 	if (ret < 0) {
-		printf("Failed to import buffers on sink: %s (%d)\n",
+		log_error("Failed to import buffers on sink: %s (%d)",
 		       strerror(-ret), -ret);
 		goto error_free_sink;
 	}
@@ -139,7 +140,7 @@ static int uvc_stream_start_no_alloc(struct uvc_stream *stream)
 	/* Allocate buffers on the sink. */
 	ret = v4l2_alloc_buffers(sink, V4L2_MEMORY_MMAP, 4);
 	if (ret < 0) {
-		printf("Failed to allocate sink buffers: %s (%d)\n",
+		log_error("Failed to allocate sink buffers: %s (%d)",
 		       strerror(-ret), -ret);
 		return ret;
 	}
@@ -147,7 +148,7 @@ static int uvc_stream_start_no_alloc(struct uvc_stream *stream)
 	/* mmap buffers. */
 	ret = v4l2_mmap_buffers(sink);
 	if (ret < 0) {
-		printf("Failed to query sink buffers: %s (%d)\n",
+		log_error("Failed to query sink buffers: %s (%d)",
 				strerror(-ret), -ret);
 		return ret;
 	}
@@ -180,7 +181,7 @@ static int uvc_stream_start_no_alloc(struct uvc_stream *stream)
 
 static int uvc_stream_start(struct uvc_stream *stream)
 {
-	printf("Starting video stream.\n");
+	log_debug("Starting video stream.");
 
 	if (stream->src->ops->alloc_buffers)
 		return uvc_stream_start_alloc(stream);
@@ -192,7 +193,7 @@ static int uvc_stream_stop(struct uvc_stream *stream)
 {
 	struct v4l2_device *sink = uvc_v4l2_device(stream->uvc);
 
-	printf("Stopping video stream.\n");
+	log_debug("Stopping video stream.");
 
 	events_unwatch_fd(stream->events, sink->fd, EVENT_WRITE);
 
@@ -219,7 +220,7 @@ int uvc_stream_set_format(struct uvc_stream *stream,
 	struct v4l2_pix_format fmt = *format;
 	int ret;
 
-	printf("Setting format to 0x%08x %ux%u\n",
+	log_debug("Setting format to 0x%08x %ux%u",
 		format->pixelformat, format->width, format->height);
 
 	ret = uvc_set_format(stream->uvc, &fmt);
@@ -231,7 +232,7 @@ int uvc_stream_set_format(struct uvc_stream *stream,
 
 int uvc_stream_set_frame_rate(struct uvc_stream *stream, unsigned int fps)
 {
-	printf("=== Setting frame rate to %u fps\n", fps);
+	log_info("Setting frame rate to %u fps", fps);
 	return video_source_set_frame_rate(stream->src, fps);
 }
 
