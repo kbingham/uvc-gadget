@@ -313,6 +313,11 @@ static void uvc_events_process(void *d)
 			errno);
 		return;
 	}
+	
+	if (uvc_event->data.length == 26 && uvc_event->data.setup.wLength == 0) {
+		log_error("Detected an empty (null) packet\n");
+		return;
+	}
 
 	memset(&resp, 0, sizeof resp);
 	resp.length = -EL2HLT;
