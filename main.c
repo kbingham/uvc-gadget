@@ -18,6 +18,7 @@
 #include "test-source.h"
 #include "jpg-source.h"
 #include "slideshow-source.h"
+#include "log.h"
 
 static void usage(const char *argv0)
 {
@@ -96,7 +97,7 @@ int main(int argc, char *argv[])
 			return 0;
 
 		default:
-			fprintf(stderr, "Invalid option '-%c'\n", opt);
+			log_error("Invalid option '-%c'", opt);
 			usage(argv[0]);
 			return 1;
 		}
@@ -107,13 +108,13 @@ int main(int argc, char *argv[])
 
 	fc = configfs_parse_uvc_function(function);
 	if (!fc) {
-		printf("Failed to identify function configuration\n");
+		log_error("Failed to identify function configuration");
 		return 1;
 	}
 
 	if (cap_device != NULL && img_path != NULL) {
-		printf("Both capture device and still image specified\n");
-		printf("Please specify only one\n");
+		log_error("Both capture device and still image specified");
+		log_error("Please specify only one");
 		return 1;
 	}
 
