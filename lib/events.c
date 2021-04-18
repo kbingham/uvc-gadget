@@ -25,7 +25,6 @@
 #include "tools.h"
 #include "log.h"
 
-
 #define SELECT_TIMEOUT		2000		/* in milliseconds */
 
 struct event_fd {
@@ -147,10 +146,11 @@ bool events_loop(struct events *events)
 			if (errno == EINTR)
 				continue;
 
-			log_error("select failed with %d\n", errno);
+			log_error("select failed with %d", errno);
 			break;
 		}
 
+		log_trace("dispatching events");
 		events_dispatch(events, &rfds, &wfds, &efds);
 	}
 
