@@ -139,15 +139,25 @@ uvc_events_process_standard(struct uvc_device *dev,
 	(void)resp;
 }
 
+// Handles processing unit controls ?
 static void
 uvc_events_process_control(struct uvc_device *dev, uint8_t req, uint8_t cs,
 			   struct uvc_request_data *resp)
 {
-	log_debug("STUB! control request (req 0x%02x cs 0x%02x)", req, cs);
-	(void)dev;
-	(void)resp;
+	log_warn("control request (req 0x%02x cs 0x%02x)", req, cs);
+
+	switch (req) {
+		case UVC_GET_INFO:
+			resp->data[0] = 0x03;
+			resp->length = 1;
+			break;
+		case UVC_SET_CUR:
+			log_debug("Control SET_CUR");
+			break;
+	}
 }
 
+// Handles video streaming controls
 static void
 uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs,
 			     struct uvc_request_data *resp)
@@ -202,14 +212,16 @@ uvc_events_process_class(struct uvc_device *dev,
 			 struct uvc_request_data *resp)
 {
 	unsigned int interface = ctrl->wIndex & 0xff;
+	// control selector
+	uint8_t cs =ctrl->wValue >> 8;
 
 	if ((ctrl->bRequestType & USB_RECIP_MASK) != USB_RECIP_INTERFACE)
 		return;
 
 	if (interface == dev->fc->control.intf.bInterfaceNumber)
-		uvc_events_process_control(dev, ctrl->bRequest, ctrl->wValue >> 8, resp);
+		uvc_events_process_control(dev, ctrl->bRequest, cs, resp);
 	else if (interface == dev->fc->streaming.intf.bInterfaceNumber)
-		uvc_events_process_streaming(dev, ctrl->bRequest, ctrl->wValue >> 8, resp);
+		uvc_events_process_streaming(dev, ctrl->bRequest, cs, resp);
 }
 
 static void
@@ -262,7 +274,8 @@ uvc_events_process_control_set(struct uvc_device *dev,
 
 	default:
 		log_error("unknown control, length = %d", data->length);
-		return;
+		target = &dev->probe;
+		//return;
 	}
 
 	uvc_fill_streaming_control(dev, target, ctrl->bFormatIndex,
