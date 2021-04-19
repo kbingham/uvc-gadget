@@ -221,8 +221,6 @@ static void
 uvc_events_setup_pu_control(struct uvc_device *dev, uint8_t req, uint8_t cs,
 			   struct uvc_request_data *resp)
 {
-	log_debug("control request (req 0x%02x cs 0x%02x)", req, cs);
-
 	// The f_uvc driver is hard coded to only support a brightness
 	// control, but that should change in the future.
 	switch (cs) {
@@ -257,8 +255,6 @@ uvc_events_setup_vs_control(struct uvc_device *dev, uint8_t req, uint8_t cs,
 			     struct uvc_request_data *resp)
 {
 	struct uvc_streaming_control *ctrl;
-
-	log_debug("streaming request (req 0x%02x cs 0x%02x)", req, cs);
 
 	if (cs != UVC_VS_PROBE_CONTROL && cs != UVC_VS_COMMIT_CONTROL)
 		return;
@@ -312,6 +308,10 @@ uvc_events_process_class(struct uvc_device *dev,
 
 	if ((ctrl->bRequestType & USB_RECIP_MASK) != USB_RECIP_INTERFACE)
 		return;
+
+	log_debug("request: ent_id=%d (%s), req=%s, cs=0x%02x", entity_id,
+		entity_id == dev->fc->control.intf.bInterfaceNumber ? "PU" : "VS",
+		log_req_tostring(ctrl->bRequest), cs);
 
 	// This is the Processing Unit control
 	if (entity_id == dev->fc->control.intf.bInterfaceNumber)
