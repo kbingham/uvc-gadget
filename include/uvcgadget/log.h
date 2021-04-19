@@ -12,19 +12,19 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <time.h>
+#include <linux/usb/video.h>
 
-#define LOG_VERSION "0.1.0"
 #define LOG_USE_COLOR
 
 typedef struct {
-  va_list ap;
-  const char *fmt;
-  const char *file;
-  const char *func;
-  struct tm *time;
-  void *udata;
-  int line;
-  int level;
+	va_list ap;
+	const char *fmt;
+	const char *file;
+	const char *func;
+	struct tm *time;
+	void *udata;
+	int line;
+	int level;
 } log_Event;
 
 typedef void (*log_LogFn)(log_Event *ev);
@@ -47,5 +47,33 @@ int log_add_callback(log_LogFn fn, void *udata, int level);
 int log_add_fp(FILE *fp, int level);
 
 void log_log(int level, const char *file, const char *func, int line, const char *fmt, ...);
+
+// Request code to string macros
+
+inline char* log_req_tostring(unsigned char code) {
+	switch (code)
+	{
+	case UVC_RC_UNDEFINED:
+		return "UVC_RC_UNDEFINED";
+	case UVC_SET_CUR:
+		return "UVC_SET_CUR";
+	case UVC_GET_CUR:
+		return "UVC_GET_CUR";
+	case UVC_GET_MIN:
+		return "UVC_GET_MIN";
+	case UVC_GET_MAX:
+		return "UVC_GET_MAX";
+	case UVC_GET_RES:
+		return "UVC_GET_RES";
+	case UVC_GET_LEN:
+		return "UVC_GET_LEN";
+	case UVC_GET_INFO:
+		return "UVC_GET_INFO";
+	case UVC_GET_DEF:
+		return "UVC_GET_DEF";	
+	default:
+		return "UNKNOWN";
+	}
+}
 
 #endif
