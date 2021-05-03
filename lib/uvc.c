@@ -67,6 +67,8 @@ struct uvc_device *uvc_open(const char *devname, struct uvc_stream *stream)
 		return NULL;
 	}
 
+	dev->brightness = PU_BRIGHTNESS_DEFAULT_VAL;
+
 	return dev;
 }
 
@@ -232,21 +234,6 @@ uvc_events_setup_pu_control(struct uvc_device *dev, uint8_t req, uint8_t cs,
 			uvc_events_pu_unimplemented_control(dev, req, resp);
 			break;
 	}
-
-	// switch (req) {
-	// 	case UVC_GET_INFO:
-	// 		resp->data[0] = 0x03;
-	// 		resp->length = 1;
-	// 		break;
-	// 	case UVC_SET_CUR:
-	// 		log_debug("Control SET_CUR");
-	// 		break;
-	// 	case UVC_GET_DEF:
-	// 		log_debug("Control GET_DEF");
-	// 		resp->data[0] = PU_BRIGHTNESS_DEFAULT_VAL;
-	// 		resp->length = 2;
-	// 		break;
-	// }
 }
 
 // Handle video streaming controls
@@ -311,7 +298,7 @@ uvc_events_process_class(struct uvc_device *dev,
 
 	log_debug("request: ent_id=%d (%s), req=%s, cs=0x%02x", entity_id,
 		entity_id == dev->fc->control.intf.bInterfaceNumber ? "PU" : "VS",
-		log_req_tostring(ctrl->bRequest), cs);
+		log_uvc_query_name(ctrl->bRequest), cs);
 
 	// This is the Processing Unit control
 	if (entity_id == dev->fc->control.intf.bInterfaceNumber)
@@ -455,7 +442,7 @@ static void uvc_events_process(void *d)
 			errno);
 		return;
 	}
-	
+
 	if (uvc_event->data.length == 26 && uvc_event->data.setup.wLength == 0) {
 		log_error("Detected an empty (null) packet");
 		return;
@@ -487,6 +474,9 @@ static void uvc_events_process(void *d)
 		uvc_stream_enable(dev->stream, 0);
 		return;
 	}
+
+	log_debug("resp->length = %d, resp->data[0] = %d",
+		resp.length, resp.data[0]);
 
 	ret = ioctl(dev->vdev->fd, UVCIOC_SEND_RESPONSE, &resp);
 	if (ret < 0) {

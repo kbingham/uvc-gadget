@@ -24,8 +24,8 @@
 
 struct uvc_request_data {
 	__s32 length;
-	struct usb_ctrlrequest setup;
 	__u8 data[52];
+	struct usb_ctrlrequest setup;
 };
 
 struct uvc_event {
