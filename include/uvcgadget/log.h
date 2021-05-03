@@ -50,29 +50,27 @@ void log_log(int level, const char *file, const char *func, int line, const char
 
 // Request code to string macros
 
-inline char* log_req_tostring(unsigned char code) {
-	switch (code)
-	{
-	case UVC_RC_UNDEFINED:
-		return "UVC_RC_UNDEFINED";
+inline const char *log_uvc_query_name(unsigned char query)
+{
+	switch (query) {
 	case UVC_SET_CUR:
-		return "UVC_SET_CUR";
+		return "SET_CUR";
 	case UVC_GET_CUR:
-		return "UVC_GET_CUR";
+		return "GET_CUR";
 	case UVC_GET_MIN:
-		return "UVC_GET_MIN";
+		return "GET_MIN";
 	case UVC_GET_MAX:
-		return "UVC_GET_MAX";
+		return "GET_MAX";
 	case UVC_GET_RES:
-		return "UVC_GET_RES";
+		return "GET_RES";
 	case UVC_GET_LEN:
-		return "UVC_GET_LEN";
+		return "GET_LEN";
 	case UVC_GET_INFO:
-		return "UVC_GET_INFO";
+		return "GET_INFO";
 	case UVC_GET_DEF:
-		return "UVC_GET_DEF";	
+		return "GET_DEF";
 	default:
-		return "UNKNOWN";
+		return "<invalid>";
 	}
 }
 
