@@ -122,6 +122,8 @@ create_uvc() {
 	create_frame $FUNCTION 1280 720 uncompressed u
 	create_frame $FUNCTION 320 180 uncompressed u
 	create_frame $FUNCTION 1920 1080 mjpeg m
+	create_frame $FUNCTION 640 480 mjpeg m
+	create_frame $FUNCTION 640 360 mjpeg m
 
 	mkdir functions/$FUNCTION/streaming/header/h
 	cd functions/$FUNCTION/streaming/header/h
