@@ -487,6 +487,7 @@ int v4l2_set_format(struct v4l2_device *dev, struct v4l2_pix_format *format)
 	fmt.fmt.pix.height = format->height;
 	fmt.fmt.pix.pixelformat = format->pixelformat;
 	fmt.fmt.pix.field = V4L2_FIELD_ANY;
+	fmt.fmt.pix.sizeimage = format->sizeimage;
 
 	ret = ioctl(dev->fd, VIDIOC_S_FMT, &fmt);
 	if (ret < 0) {
