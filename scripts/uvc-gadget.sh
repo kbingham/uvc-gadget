@@ -131,6 +131,8 @@ create_uvc() {
 	ln -s ../../header/h
 	cd ../../class/hs
 	ln -s ../../header/h
+	cd ../../class/ss
+	ln -s ../../header/h
 	cd ../../../control
 	mkdir header/h
 	ln -s header/h class/fs
