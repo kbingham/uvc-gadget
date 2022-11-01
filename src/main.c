@@ -47,7 +47,7 @@ static void usage(const char *argv0)
 /* Necessary for and only used by signal handler. */
 static struct events *sigint_events;
 
-static void sigint_handler(int signal)
+static void sigint_handler(int signal __attribute__((unused)))
 {
 	/* Stop the main loop when the user presses CTRL-C */
 	events_stop(sigint_events);

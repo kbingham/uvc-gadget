@@ -36,7 +36,8 @@ struct uvc_stream
  * Video streaming
  */
 
-static void uvc_stream_source_process(void *d, struct video_source *src,
+static void uvc_stream_source_process(void *d,
+				      struct video_source *src __attribute__((unused)),
 				      struct video_buffer *buffer)
 {
 	struct uvc_stream *stream = d;
