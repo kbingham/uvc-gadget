@@ -191,12 +191,18 @@ uvc_events_process_standard(struct uvc_device *dev,
 }
 
 static void
-uvc_events_process_control(struct uvc_device *dev, uint8_t req, uint8_t cs,
+uvc_events_process_control(struct uvc_device *dev, uint8_t req, uint8_t cs, uint8_t len,
 			   struct uvc_request_data *resp)
 {
 	printf("control request (req %s cs %s)\n", uvc_request_name(req), pu_control_name(cs));
 	(void)dev;
-	(void)resp;
+
+	/*
+	 * Responding to controls is not currently implemented. As an interim
+	 * measure respond to say that both get and set operations are permitted.
+	 */
+	resp->data[0] = 0x03;
+	resp->length = len;
 }
 
 static void
@@ -263,7 +269,7 @@ uvc_events_process_class(struct uvc_device *dev,
 		return;
 
 	if (interface == dev->fc->control.intf.bInterfaceNumber)
-		uvc_events_process_control(dev, ctrl->bRequest, ctrl->wValue >> 8, resp);
+		uvc_events_process_control(dev, ctrl->bRequest, ctrl->wValue >> 8, ctrl->wLength, resp);
 	else if (interface == dev->fc->streaming.intf.bInterfaceNumber)
 		uvc_events_process_streaming(dev, ctrl->bRequest, ctrl->wValue >> 8, resp);
 }
