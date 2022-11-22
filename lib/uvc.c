@@ -41,6 +41,56 @@ struct uvc_device
 	unsigned int height;
 };
 
+static const char *uvc_request_names[] = {
+	[UVC_RC_UNDEFINED] = "UNDEFINED",
+	[UVC_SET_CUR] = "SET_CUR",
+	[UVC_GET_CUR] = "GET_CUR",
+	[UVC_GET_MIN] = "GET_MIN",
+	[UVC_GET_MAX] = "GET_MAX",
+	[UVC_GET_RES] = "GET_RES",
+	[UVC_GET_LEN] = "GET_LEN",
+	[UVC_GET_INFO] = "GET_INFO",
+	[UVC_GET_DEF] = "GET_DEF",
+};
+
+static const char *uvc_request_name(uint8_t req)
+{
+    if (req < ARRAY_SIZE(uvc_request_names))
+        return uvc_request_names[req];
+    else
+        return "UNKNOWN";
+}
+
+static const char *uvc_pu_control_names[] = {
+	[UVC_PU_CONTROL_UNDEFINED] = "UNDEFINED",
+	[UVC_PU_BACKLIGHT_COMPENSATION_CONTROL] = "BACKLIGHT_COMPENSATION",
+	[UVC_PU_BRIGHTNESS_CONTROL] = "BRIGHTNESS",
+	[UVC_PU_CONTRAST_CONTROL] = "CONTRAST",
+	[UVC_PU_GAIN_CONTROL] = "GAIN",
+	[UVC_PU_POWER_LINE_FREQUENCY_CONTROL] = "POWER_LINE_FREQUENCY",
+	[UVC_PU_HUE_CONTROL] = "HUE",
+	[UVC_PU_SATURATION_CONTROL] = "SATURATION",
+	[UVC_PU_SHARPNESS_CONTROL] = "SHARPNESS",
+	[UVC_PU_GAMMA_CONTROL] = "GAMMA",
+	[UVC_PU_WHITE_BALANCE_TEMPERATURE_CONTROL] = "WHITE_BALANCE_TEMPERATURE",
+	[UVC_PU_WHITE_BALANCE_TEMPERATURE_AUTO_CONTROL] = "WHITE_BALANCE_TEMPERATURE_AUTO",
+	[UVC_PU_WHITE_BALANCE_COMPONENT_CONTROL] = "WHITE_BALANCE_COMPONENT",
+	[UVC_PU_WHITE_BALANCE_COMPONENT_AUTO_CONTROL] = "WHITE_BALANCE_COMPONENT_AUTO",
+	[UVC_PU_DIGITAL_MULTIPLIER_CONTROL] = "DIGITAL_MULTIPLIER",
+	[UVC_PU_DIGITAL_MULTIPLIER_LIMIT_CONTROL] = "DIGITAL_MULTIPLIER_LIMIT",
+	[UVC_PU_HUE_AUTO_CONTROL] = "HUE_AUTO",
+	[UVC_PU_ANALOG_VIDEO_STANDARD_CONTROL] = "ANALOG_VIDEO_STANDARD",
+	[UVC_PU_ANALOG_LOCK_STATUS_CONTROL] = "ANALOG_LOCK_STATUS",
+};
+
+static const char *pu_control_name(uint8_t cs)
+{
+    if (cs < ARRAY_SIZE(uvc_pu_control_names))
+        return uvc_pu_control_names[cs];
+    else
+        return "UNKNOWN";
+}
+
 struct uvc_device *uvc_open(const char *devname, struct uvc_stream *stream)
 {
 	struct uvc_device *dev;
@@ -144,7 +194,7 @@ static void
 uvc_events_process_control(struct uvc_device *dev, uint8_t req, uint8_t cs,
 			   struct uvc_request_data *resp)
 {
-	printf("control request (req %02x cs %02x)\n", req, cs);
+	printf("control request (req %s cs %s)\n", uvc_request_name(req), pu_control_name(cs));
 	(void)dev;
 	(void)resp;
 }
@@ -155,7 +205,7 @@ uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs,
 {
 	struct uvc_streaming_control *ctrl;
 
-	printf("streaming request (req %02x cs %02x)\n", req, cs);
+	printf("streaming request (req %s cs %02x)\n", uvc_request_name(req), cs);
 
 	if (cs != UVC_VS_PROBE_CONTROL && cs != UVC_VS_COMMIT_CONTROL)
 		return;
