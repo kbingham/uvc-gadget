@@ -60,13 +60,28 @@ static void uvc_stream_uvc_process(void *d)
 	video_source_queue_buffer(stream->src, &buf);
 }
 
-static int uvc_stream_start(struct uvc_stream *stream)
+static void uvc_stream_uvc_process_no_buf(void *d)
+{
+	struct uvc_stream *stream = d;
+	struct v4l2_device *sink = uvc_v4l2_device(stream->uvc);
+	struct video_buffer buf;
+	int ret;
+
+	ret = v4l2_dequeue_buffer(sink, &buf);
+	if (ret < 0)
+		return;
+
+	video_source_fill_buffer(stream->src, &buf);
+
+	v4l2_queue_buffer(sink, &buf);
+}
+
+
+static int uvc_stream_start_alloc(struct uvc_stream *stream)
 {
 	struct v4l2_device *sink = uvc_v4l2_device(stream->uvc);
 	struct video_buffer_set *buffers = NULL;
 	int ret;
-
-	printf("Starting video stream.\n");
 
 	/* Allocate and export the buffers on the source. */
 	ret = video_source_alloc_buffers(stream->src, 4);
@@ -114,6 +129,64 @@ error_free_source:
 	if (buffers)
 		video_buffer_set_delete(buffers);
 	return ret;
+}
+
+static int uvc_stream_start_no_alloc(struct uvc_stream *stream)
+{
+	struct v4l2_device *sink = uvc_v4l2_device(stream->uvc);
+	int ret;
+	unsigned int i;
+
+	/* Allocate buffers on the sink. */
+	ret = v4l2_alloc_buffers(sink, V4L2_MEMORY_MMAP, 4);
+	if (ret < 0) {
+		printf("Failed to allocate sink buffers: %s (%d)\n",
+		       strerror(-ret), -ret);
+		return ret;
+	}
+
+	/* mmap buffers. */
+	ret = v4l2_mmap_buffers(sink);
+	if (ret < 0) {
+		printf("Failed to query sink buffers: %s (%d)\n",
+				strerror(-ret), -ret);
+		return ret;
+	}
+
+	/* Queue buffers to sink. */
+	for (i = 0; i < sink->buffers.nbufs; ++i) {
+		struct video_buffer buf = {
+			.index = i,
+			.size = sink->buffers.buffers[i].size,
+			.mem = sink->buffers.buffers[i].mem,
+		};
+
+		video_source_fill_buffer(stream->src, &buf);
+		ret = v4l2_queue_buffer(sink, &buf);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* Start the source and sink. */
+	video_source_stream_on(stream->src);
+	ret = v4l2_stream_on(sink);
+	if (ret < 0)
+		return ret;
+
+	events_watch_fd(stream->events, sink->fd, EVENT_WRITE,
+			uvc_stream_uvc_process_no_buf, stream);
+
+	return 0;
+}
+
+static int uvc_stream_start(struct uvc_stream *stream)
+{
+	printf("Starting video stream.\n");
+
+	if (stream->src->ops->alloc_buffers)
+		return uvc_stream_start_alloc(stream);
+	else
+		return uvc_stream_start_no_alloc(stream);
 }
 
 static int uvc_stream_stop(struct uvc_stream *stream)
@@ -216,5 +289,7 @@ void uvc_stream_set_video_source(struct uvc_stream *stream,
 {
 	stream->src = src;
 
-	video_source_set_buffer_handler(src, uvc_stream_source_process, stream);
+	if (stream->src->ops->alloc_buffers)
+		video_source_set_buffer_handler(src, uvc_stream_source_process,
+						stream);
 }
