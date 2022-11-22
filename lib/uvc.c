@@ -39,7 +39,6 @@ struct uvc_device
 	unsigned int fcc;
 	unsigned int width;
 	unsigned int height;
-	unsigned int maxsize;
 };
 
 struct uvc_device *uvc_open(const char *devname, struct uvc_stream *stream)
@@ -112,12 +111,15 @@ uvc_fill_streaming_control(struct uvc_device *dev,
 	ctrl->bFrameIndex = iframe ;
 	ctrl->dwFrameInterval = ival;
 
+	/*
+	 * The maximum size in bytes for a single frame depends on the format.
+	 * This switch will need extending for any new formats that are added
+	 * to ensure the buffer size calculations are done correctly.
+	 */
 	switch (format->fcc) {
 	case V4L2_PIX_FMT_YUYV:
-		ctrl->dwMaxVideoFrameSize = frame->width * frame->height * 2;
-		break;
 	case V4L2_PIX_FMT_MJPEG:
-		ctrl->dwMaxVideoFrameSize = dev->maxsize;
+		ctrl->dwMaxVideoFrameSize = frame->width * frame->height * 2;
 		break;
 	}
 
@@ -287,7 +289,7 @@ uvc_events_process_data(struct uvc_device *dev,
 		pixfmt.pixelformat = format->fcc;
 		pixfmt.field = V4L2_FIELD_NONE;
 		if (format->fcc == V4L2_PIX_FMT_MJPEG)
-			pixfmt.sizeimage = dev->maxsize * 1.5;
+			pixfmt.sizeimage = target->dwMaxVideoFrameSize;
 
 		uvc_stream_set_format(dev->stream, &pixfmt);
 
@@ -373,8 +375,6 @@ void uvc_events_init(struct uvc_device *dev, struct events *events)
 
 void uvc_set_config(struct uvc_device *dev, struct uvc_function_config *fc)
 {
-	/* FIXME: The maximum size should be specified per format and frame. */
-	dev->maxsize = 0;
 	dev->fc = fc;
 }
 
