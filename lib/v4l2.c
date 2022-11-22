@@ -789,6 +789,7 @@ int v4l2_dequeue_buffer(struct v4l2_device *dev, struct video_buffer *buffer)
 	}
 
 	buffer->index = buf.index;
+	buffer->size = buf.length;
 	buffer->mem = dev->buffers.buffers[buf.index].mem;
 	buffer->bytesused = buf.bytesused;
 	buffer->timestamp = buf.timestamp;
