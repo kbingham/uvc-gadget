@@ -17,6 +17,7 @@
 #include "v4l2-source.h"
 #include "test-source.h"
 #include "jpg-source.h"
+#include "slideshow-source.h"
 
 static void usage(const char *argv0)
 {
@@ -24,6 +25,7 @@ static void usage(const char *argv0)
 	fprintf(stderr, "Available options are\n");
 	fprintf(stderr, " -c device	V4L2 source device\n");
 	fprintf(stderr, " -i image	MJPEG image\n");
+	fprintf(stderr, " -s directory	directory of slideshow images\n");
 	fprintf(stderr, " -h		Print this help screen and exit\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, " <uvc device>	UVC device instance specifier\n");
@@ -60,6 +62,8 @@ int main(int argc, char *argv[])
 	char *function = NULL;
 	char *cap_device = NULL;
 	char *img_path = NULL;
+	char *slideshow_dir = NULL;
+
 	struct uvc_function_config *fc;
 	struct uvc_stream *stream = NULL;
 	struct video_source *src = NULL;
@@ -67,7 +71,7 @@ int main(int argc, char *argv[])
 	int ret = 0;
 	int opt;
 
-	while ((opt = getopt(argc, argv, "c:i:h")) != -1) {
+	while ((opt = getopt(argc, argv, "c:i:s:k:h")) != -1) {
 		switch (opt) {
 		case 'c':
 			cap_device = optarg;
@@ -75,6 +79,10 @@ int main(int argc, char *argv[])
 
 		case 'i':
 			img_path = optarg;
+			break;
+
+		case 's':
+			slideshow_dir = optarg;
 			break;
 
 		case 'h':
@@ -118,6 +126,8 @@ int main(int argc, char *argv[])
 		src = v4l2_video_source_create(cap_device);
 	else if (img_path)
 		src = jpg_video_source_create(img_path);
+	else if (slideshow_dir)
+		src = slideshow_video_source_create(slideshow_dir);
 	else
 		src = test_video_source_create();
 	if (src == NULL) {
