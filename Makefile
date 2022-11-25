@@ -35,11 +35,11 @@ uvc-gadget: ## Build the uvc-gadget library and application
 uvc-gadget: | $(BUILDDIR)/build.ninja
 	$(ninja) -C $(BUILDDIR)
 
-.PHONY: test
+.PHONY: test install
 test: ## Run tests
 install: ## Install the package on this system. (Or set DESTDIR)
 test install: | $(BUILDDIR)/build.ninja
-	$(ninja) -C $(BUILDDIR) $*
+	$(ninja) -C $(BUILDDIR) $@
 
 iwyu: ## Generate include-what-you-use report
 	iwyu_tool -p $(BUILDDIR) -j4 > iwyu.report
