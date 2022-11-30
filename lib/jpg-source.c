@@ -20,6 +20,7 @@
 #include <linux/videodev2.h>
 
 #include "events.h"
+#include "timer.h"
 #include "tools.h"
 #include "v4l2.h"
 #include "jpg-source.h"
@@ -30,6 +31,9 @@ struct jpg_source {
 
 	unsigned int imgsize;
 	void *imgdata;
+
+	struct timer *timer;
+	bool streaming;
 };
 
 #define to_jpg_source(s) container_of(s, struct jpg_source, src)
@@ -40,6 +44,8 @@ static void jpg_source_destroy(struct video_source *s)
 
 	if (src->imgdata)
 		free(src->imgdata);
+
+	timer_destroy(src->timer);
 
 	free(src);
 }
@@ -55,9 +61,12 @@ static int jpg_source_set_format(struct video_source *s __attribute__((unused)),
 	return 0;
 }
 
-static int jpg_source_set_frame_rate(struct video_source *s __attribute__((unused)),
-				     unsigned int fps __attribute__((unused)))
+static int jpg_source_set_frame_rate(struct video_source *s, unsigned int fps)
 {
+	struct jpg_source *src = to_jpg_source(s);
+
+	timer_set_fps(src->timer, fps);
+
 	return 0;
 }
 
@@ -66,14 +75,32 @@ static int jpg_source_free_buffers(struct video_source *s __attribute__((unused)
 	return 0;
 }
 
-static int jpg_source_stream_on(struct video_source *s __attribute__((unused)))
+static int jpg_source_stream_on(struct video_source *s)
 {
+	struct jpg_source *src = to_jpg_source(s);
+	int ret;
+
+	ret = timer_arm(src->timer);
+	if (ret)
+		return ret;
+
+	src->streaming = true;
 	return 0;
 }
 
-static int jpg_source_stream_off(struct video_source *s __attribute__((unused)))
+static int jpg_source_stream_off(struct video_source *s)
 {
-	return 0;
+	struct jpg_source *src = to_jpg_source(s);
+	int ret;
+
+	/*
+	 * No error check here, because we want to flag that streaming is over
+	 * even if the timer is still running due to the failure.
+	 */
+	ret = timer_disarm(src->timer);
+	src->streaming = false;
+
+	return ret;
 }
 
 static void jpg_source_fill_buffer(struct video_source *s,
@@ -83,6 +110,13 @@ static void jpg_source_fill_buffer(struct video_source *s,
 
 	memcpy(buf->mem, src->imgdata, src->imgsize);
 	buf->bytesused = src->imgsize;
+
+	/*
+	 * Wait for the timer to elapse to ensure that our configured frame rate
+	 * is adhered to.
+	 */
+	if (src->streaming)
+		timer_wait(src->timer);
 }
 
 static const struct video_source_ops jpg_source_ops = {
@@ -135,6 +169,10 @@ struct video_source *jpg_video_source_create(const char *img_path)
 		fprintf(stderr, "error reading data from %s: %d\n", img_path, errno);
 		goto err_free_imgdata;
 	}
+
+	src->timer = timer_new();
+	if (!src->timer)
+		goto err_free_imgdata;
 
 	close(fd);
 
