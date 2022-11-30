@@ -5,6 +5,7 @@ uvcgadget_public_headers = files([
   'events.h',
   'list.h',
   'stream.h',
+  'timer.h',
   'v4l2-source.h',
   'video-source.h',
   ])
