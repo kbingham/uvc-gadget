@@ -74,6 +74,9 @@ static inline void list_remove(struct list_entry *entry)
 #define list_last_entry(list, type, member) \
 	list_entry((list)->prev, type, member)
 
+#define list_next_entry(entry, type, member) \
+	list_entry((entry)->next, type, member)
+
 #define list_for_each(entry, list) \
 	for (entry = (list)->next; entry != (list); entry = entry->next)
 
